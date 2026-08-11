@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, get_db
 from app.models.user import User
+from app.api.routes.profile import router as profile_router
+from app.api.routes.preferences import router as preferences_router
 
 
 app = FastAPI(
@@ -10,6 +12,8 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(profile_router)
+app.include_router(preferences_router)
 
 @app.get("/health")
 def health_check():
