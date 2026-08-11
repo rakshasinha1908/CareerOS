@@ -1,0 +1,126 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #ececef;
+}
+
+.search-box {
+  width: 335px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  background: #ffffff;
+  border: 1px solid #dde1e5;
+  border-radius: 8px;
+  transition: border-color 120ms ease;
+}
+
+.search-box:focus-within {
+  border-color: #b7bdc4;
+}
+
+.search-icon {
+  color: #9aa0a8;
+  font-size: 18px;
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.search-box input::placeholder {
+  color: #9aa0a8;
+}
+
+.search-shortcut {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: #eef0f2;
+  color: #6b727a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-button,
+.avatar-button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #4b515a;
+  transition: background 120ms ease;
+}
+
+.icon-button {
+  font-size: 17px;
+  position: relative;
+}
+
+.icon-button:hover {
+  background: var(--surface-muted);
+}
+
+.icon-button[aria-label="Notifications"]::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e5484d;
+  border: 1.5px solid #ffffff;
+}
+
+.avatar-button {
+  border: 1px solid #dde1e5;
+  border-radius: 50%;
+  background: #e7e9ea;
+  color: #333a42;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.topbar-divider {
+  width: 1px;
+  height: 24px;
+  margin: 0 10px;
+  background: #ececef;
+}
+
+@media (max-width: 900px) {
+  .search-box {
+    width: 280px;
+  }
+}
+
+@media (max-width: 700px) {
+  .search-box {
+    width: min(280px, 60vw);
+  }
+}
