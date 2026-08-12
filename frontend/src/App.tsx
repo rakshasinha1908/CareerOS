@@ -24,6 +24,8 @@ import { Routes, Route } from "react-router-dom";
 import AppShell from "./components/layout/AppShell";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import ProfilePage from "./pages/ProfilePage";
+import PreferencesPage from "./pages/PreferencesPage";
 
 function App() {
   return (
@@ -91,25 +93,9 @@ function App() {
           }
         />
 
-        <Route
-          path="/profile"
-          element={
-            <PlaceholderPage
-              title="Profile"
-              description="Manage your professional profile and personal career information."
-            />
-          }
-        />
+        <Route path="/profile" element={<ProfilePage />} />
 
-        <Route
-          path="/preferences"
-          element={
-            <PlaceholderPage
-              title="Preferences"
-              description="Configure the roles, locations, skills, and work preferences used by CareerOS."
-            />
-          }
-        />
+        <Route path="/preferences" element={<PreferencesPage />} />
 
         <Route
           path="/settings"
