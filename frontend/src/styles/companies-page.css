@@ -31,6 +31,19 @@
   font-size: 15px;
 }
 
+.companies-status {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.companies-status-error {
+  color: #b43732;
+}
+
+.companies-status-success {
+  color: #168a64;
+}
+
 .companies-add-button {
   height: 38px;
   display: inline-flex;
@@ -103,17 +116,6 @@
   color: #9aa0a8;
 }
 
-.companies-filter {
-  height: 38px;
-  min-width: 150px;
-  padding: 0 10px;
-  border: 1px solid #cfd4d9;
-  outline: 0;
-  background: #ffffff;
-  color: #3d454d;
-  font-size: 12px;
-}
-
 /* ---------------------------------- */
 /* Main card */
 /* ---------------------------------- */
@@ -180,7 +182,6 @@
   border-bottom: 1px solid #e8eaec;
   color: #4c555e;
   font-size: 12px;
-  white-space: nowrap;
 }
 
 .companies-table tbody tr:last-child td {
@@ -224,19 +225,19 @@
   font-weight: 600;
 }
 
-.company-name-cell span {
-  color: #8a929a;
-  font-size: 10px;
+.company-career-link {
+  display: inline-block;
+  max-width: 520px;
+  overflow: hidden;
+  color: #53606d;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.company-industry {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  background: #f1f3f4;
-  color: #505962;
-  font-size: 10px;
+.company-career-link:hover {
+  color: #168a64;
+  text-decoration: underline;
 }
 
 .company-row-actions {
@@ -383,7 +384,7 @@
 
 .company-form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 18px;
 }
 
@@ -393,20 +394,17 @@
   gap: 7px;
 }
 
-.company-form-field-wide {
-  grid-column: 1 / -1;
-}
-
 .company-form-field label {
   color: #2d343b;
   font-size: 12px;
   font-weight: 500;
 }
 
-.company-form-field input,
-.company-form-field textarea {
+.company-form-field input {
   width: 100%;
+  height: 40px;
   box-sizing: border-box;
+  padding: 0 11px;
   border: 1px solid #aeb5bd;
   outline: 0;
   border-radius: 0;
@@ -415,25 +413,12 @@
   font-size: 13px;
 }
 
-.company-form-field input {
-  height: 40px;
-  padding: 0 11px;
-}
-
-.company-form-field textarea {
-  padding: 10px 11px;
-  resize: vertical;
-  line-height: 1.5;
-}
-
-.company-form-field input:focus,
-.company-form-field textarea:focus {
+.company-form-field input:focus {
   border-color: #111111;
   box-shadow: 0 0 0 2px rgba(98, 232, 180, 0.2);
 }
 
-.company-form-field input::placeholder,
-.company-form-field textarea::placeholder {
+.company-form-field input::placeholder {
   color: #a0a6ac;
 }
 
@@ -496,31 +481,14 @@
     justify-content: center;
   }
 
-  .companies-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .companies-search {
     max-width: none;
-  }
-
-  .companies-filter {
-    width: 100%;
   }
 }
 
 @media (max-width: 600px) {
   .companies-page-header h1 {
     font-size: 32px;
-  }
-
-  .company-form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .company-form-field-wide {
-    grid-column: auto;
   }
 
   .company-modal-body,

@@ -5,61 +5,37 @@ import { apiRequest } from "../api/client";
 type Company = {
   id: string;
   name: string;
-  website: string;
-  industry: string;
-  size: string;
-  headquarters: string;
-  notes: string;
+  career_url: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type CompanyForm = {
+  name: string;
+  career_url: string;
 };
 
 type CompanyPayload = {
   name: string;
-  website: string | null;
-  industry: string | null;
-  size: string | null;
-  headquarters: string | null;
-  notes: string | null;
+  career_url: string;
 };
 
-const emptyCompany: Omit<Company, "id"> = {
+const emptyCompany: CompanyForm = {
   name: "",
-  website: "",
-  industry: "",
-  size: "",
-  headquarters: "",
-  notes: "",
+  career_url: "",
 };
 
-const industryOptions = [
-  "All industries",
-  "Software",
-  "Fintech",
-  "Technology",
-  "Productivity",
-];
-
-function mapCompanyToForm(data: Company): Company {
+function mapCompanyToForm(data: Company): CompanyForm {
   return {
-    id: data.id,
     name: data.name ?? "",
-    website: data.website ?? "",
-    industry: data.industry ?? "",
-    size: data.size ?? "",
-    headquarters: data.headquarters ?? "",
-    notes: data.notes ?? "",
+    career_url: data.career_url ?? "",
   };
 }
 
-function mapFormToPayload(
-  data: Omit<Company, "id">,
-): CompanyPayload {
+function mapFormToPayload(data: CompanyForm): CompanyPayload {
   return {
     name: data.name.trim(),
-    website: data.website.trim() || null,
-    industry: data.industry.trim() || null,
-    size: data.size.trim() || null,
-    headquarters: data.headquarters.trim() || null,
-    notes: data.notes.trim() || null,
+    career_url: data.career_url.trim(),
   };
 }
 
@@ -67,14 +43,12 @@ function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
 
   const [search, setSearch] = useState("");
-  const [industryFilter, setIndustryFilter] =
-    useState("All industries");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] =
     useState<Company | null>(null);
 
-  const [form, setForm] = useState(emptyCompany);
+  const [form, setForm] = useState<CompanyForm>(emptyCompany);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -87,20 +61,17 @@ function CompaniesPage() {
   const filteredCompanies = useMemo(() => {
     const query = search.trim().toLowerCase();
 
+    if (!query) {
+      return companies;
+    }
+
     return companies.filter((company) => {
-      const matchesSearch =
-        !query ||
+      return (
         company.name.toLowerCase().includes(query) ||
-        company.industry.toLowerCase().includes(query) ||
-        company.headquarters.toLowerCase().includes(query);
-
-      const matchesIndustry =
-        industryFilter === "All industries" ||
-        company.industry === industryFilter;
-
-      return matchesSearch && matchesIndustry;
+        company.career_url.toLowerCase().includes(query)
+      );
     });
-  }, [companies, search, industryFilter]);
+  }, [companies, search]);
 
   useEffect(() => {
     const loadCompanies = async () => {
@@ -112,7 +83,7 @@ function CompaniesPage() {
           "/api/v1/companies",
         );
 
-        setCompanies(data.map(mapCompanyToForm));
+        setCompanies(data);
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -140,11 +111,7 @@ function CompaniesPage() {
 
     setForm({
       name: company.name,
-      website: company.website,
-      industry: company.industry,
-      size: company.size,
-      headquarters: company.headquarters,
-      notes: company.notes,
+      career_url: company.career_url,
     });
 
     setError("");
@@ -163,7 +130,7 @@ function CompaniesPage() {
   };
 
   const updateForm = (
-    field: keyof typeof emptyCompany,
+    field: keyof CompanyForm,
     value: string,
   ) => {
     setForm((current) => ({
@@ -175,7 +142,7 @@ function CompaniesPage() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) {
+    if (!form.name.trim() || !form.career_url.trim()) {
       return;
     }
 
@@ -196,17 +163,17 @@ function CompaniesPage() {
             },
           );
 
-        const updated = mapCompanyToForm(updatedCompany);
-
         setCompanies((current) =>
           current.map((company) =>
-            company.id === updated.id
-              ? updated
+            company.id === updatedCompany.id
+              ? updatedCompany
               : company,
           ),
         );
 
-        setSuccessMessage("Company updated successfully.");
+        setSuccessMessage(
+          "Company updated successfully.",
+        );
       } else {
         const createdCompany =
           await apiRequest<Company>(
@@ -217,14 +184,14 @@ function CompaniesPage() {
             },
           );
 
-        const created = mapCompanyToForm(createdCompany);
-
         setCompanies((current) => [
           ...current,
-          created,
+          createdCompany,
         ]);
 
-        setSuccessMessage("Company added successfully.");
+        setSuccessMessage(
+          "Company added successfully.",
+        );
       }
 
       setIsModalOpen(false);
@@ -274,7 +241,9 @@ function CompaniesPage() {
         current.filter((item) => item.id !== id),
       );
 
-      setSuccessMessage("Company deleted successfully.");
+      setSuccessMessage(
+        "Company deleted successfully.",
+      );
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -290,24 +259,26 @@ function CompaniesPage() {
     <div className="companies-page">
       <header className="companies-page-header">
         <div>
-          <p className="companies-eyebrow">COMPANIES</p>
+          <p className="companies-eyebrow">
+            COMPANIES
+          </p>
 
           <h1>Companies</h1>
 
           <p className="companies-page-description">
-            Track companies you're interested in and keep your
-            target list organized.
+            Keep track of the companies whose career
+            pages you want to follow.
           </p>
 
           {isLoading && (
-            <p className="companies-page-description">
+            <p className="companies-status">
               Loading companies...
             </p>
           )}
 
           {error && (
             <p
-              className="companies-page-description"
+              className="companies-status companies-status-error"
               role="alert"
             >
               {error}
@@ -316,7 +287,7 @@ function CompaniesPage() {
 
           {successMessage && (
             <p
-              className="companies-page-description"
+              className="companies-status companies-status-success"
               role="status"
             >
               {successMessage}
@@ -337,7 +308,9 @@ function CompaniesPage() {
 
       <section className="companies-toolbar">
         <div className="companies-search">
-          <span className="companies-search-icon">⌕</span>
+          <span className="companies-search-icon">
+            ⌕
+          </span>
 
           <input
             type="search"
@@ -348,19 +321,6 @@ function CompaniesPage() {
             }
           />
         </div>
-
-        <select
-          className="companies-filter"
-          value={industryFilter}
-          onChange={(event) =>
-            setIndustryFilter(event.target.value)
-          }
-          aria-label="Filter by industry"
-        >
-          {industryOptions.map((industry) => (
-            <option key={industry}>{industry}</option>
-          ))}
-        </select>
       </section>
 
       <section className="companies-content-card">
@@ -383,9 +343,7 @@ function CompaniesPage() {
               <thead>
                 <tr>
                   <th>Company</th>
-                  <th>Industry</th>
-                  <th>Size</th>
-                  <th>Headquarters</th>
+                  <th>Career Page</th>
                   <th aria-label="Actions" />
                 </tr>
               </thead>
@@ -402,25 +360,22 @@ function CompaniesPage() {
                         </div>
 
                         <div>
-                          <strong>{company.name}</strong>
-
-                          <span>
-                            {company.website || "—"}
-                          </span>
+                          <strong>
+                            {company.name}
+                          </strong>
                         </div>
                       </div>
                     </td>
 
                     <td>
-                      <span className="company-industry">
-                        {company.industry || "—"}
-                      </span>
-                    </td>
-
-                    <td>{company.size || "—"}</td>
-
-                    <td>
-                      {company.headquarters || "—"}
+                      <a
+                        className="company-career-link"
+                        href={company.career_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {company.career_url}
+                      </a>
                     </td>
 
                     <td>
@@ -431,7 +386,8 @@ function CompaniesPage() {
                             openEditModal(company)
                           }
                           disabled={
-                            deletingCompanyId === company.id
+                            deletingCompanyId ===
+                            company.id
                           }
                           aria-label={`Edit ${company.name}`}
                         >
@@ -445,11 +401,13 @@ function CompaniesPage() {
                             handleDelete(company.id)
                           }
                           disabled={
-                            deletingCompanyId === company.id
+                            deletingCompanyId ===
+                            company.id
                           }
                           aria-label={`Delete ${company.name}`}
                         >
-                          {deletingCompanyId === company.id
+                          {deletingCompanyId ===
+                          company.id
                             ? "Deleting..."
                             : "Delete"}
                         </button>
@@ -462,19 +420,24 @@ function CompaniesPage() {
           </div>
         ) : (
           <div className="companies-empty-state">
-            <div className="companies-empty-icon">⌂</div>
+            <div className="companies-empty-icon">
+              ⌂
+            </div>
 
             <h3>
               {isLoading
                 ? "Loading companies..."
-                : "No companies found"}
+                : search
+                  ? "No companies found"
+                  : "No companies yet"}
             </h3>
 
             {!isLoading && (
               <>
                 <p>
-                  Try changing your search or filters, or add a new
-                  company to your target list.
+                  {search
+                    ? "Try a different search or add a new company."
+                    : "Add the career pages of companies you want to track."}
                 </p>
 
                 <button
@@ -535,7 +498,7 @@ function CompaniesPage() {
 
             <div className="company-modal-body">
               <div className="company-form-grid">
-                <div className="company-form-field company-form-field-wide">
+                <div className="company-form-field">
                   <label htmlFor="company-name">
                     Company Name
                   </label>
@@ -554,93 +517,21 @@ function CompaniesPage() {
                 </div>
 
                 <div className="company-form-field">
-                  <label htmlFor="company-industry">
-                    Industry
+                  <label htmlFor="company-career-url">
+                    Career Page URL
                   </label>
 
                   <input
-                    id="company-industry"
-                    value={form.industry}
+                    id="company-career-url"
+                    type="url"
+                    value={form.career_url}
                     onChange={(event) =>
                       updateForm(
-                        "industry",
+                        "career_url",
                         event.target.value,
                       )
                     }
-                    placeholder="e.g. Fintech"
-                  />
-                </div>
-
-                <div className="company-form-field">
-                  <label htmlFor="company-size">
-                    Company Size
-                  </label>
-
-                  <input
-                    id="company-size"
-                    value={form.size}
-                    onChange={(event) =>
-                      updateForm(
-                        "size",
-                        event.target.value,
-                      )
-                    }
-                    placeholder="e.g. 500–1,000"
-                  />
-                </div>
-
-                <div className="company-form-field">
-                  <label htmlFor="company-website">
-                    Website
-                  </label>
-
-                  <input
-                    id="company-website"
-                    value={form.website}
-                    onChange={(event) =>
-                      updateForm(
-                        "website",
-                        event.target.value,
-                      )
-                    }
-                    placeholder="https://company.com"
-                  />
-                </div>
-
-                <div className="company-form-field">
-                  <label htmlFor="company-location">
-                    Headquarters
-                  </label>
-
-                  <input
-                    id="company-location"
-                    value={form.headquarters}
-                    onChange={(event) =>
-                      updateForm(
-                        "headquarters",
-                        event.target.value,
-                      )
-                    }
-                    placeholder="e.g. Bengaluru"
-                  />
-                </div>
-
-                <div className="company-form-field company-form-field-wide">
-                  <label htmlFor="company-notes">
-                    Notes
-                  </label>
-
-                  <textarea
-                    id="company-notes"
-                    rows={4}
-                    value={form.notes}
-                    onChange={(event) =>
-                      updateForm(
-                        "notes",
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Anything you want to remember about this company..."
+                    placeholder="https://company.com/careers"
                   />
                 </div>
               </div>
@@ -661,7 +552,9 @@ function CompaniesPage() {
                 className="company-modal-save"
                 onClick={handleSave}
                 disabled={
-                  !form.name.trim() || isSaving
+                  !form.name.trim() ||
+                  !form.career_url.trim() ||
+                  isSaving
                 }
               >
                 {isSaving
