@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "../styles/companies-page.css";
+import { apiRequest } from "../api/client";
 
 type Company = {
-  id: number;
+  id: string;
   name: string;
   website: string;
   industry: string;
@@ -11,62 +12,14 @@ type Company = {
   notes: string;
 };
 
-const initialCompanies: Company[] = [
-  {
-    id: 1,
-    name: "Stripe",
-    website: "stripe.com",
-    industry: "Fintech",
-    size: "5,000+",
-    headquarters: "San Francisco",
-    notes: "Strong engineering culture and backend opportunities.",
-  },
-  {
-    id: 2,
-    name: "Linear",
-    website: "linear.app",
-    industry: "Software",
-    size: "100–250",
-    headquarters: "San Francisco",
-    notes: "Interested in product engineering roles.",
-  },
-  {
-    id: 3,
-    name: "Razorpay",
-    website: "razorpay.com",
-    industry: "Fintech",
-    size: "1,000–5,000",
-    headquarters: "Bengaluru",
-    notes: "Target company for backend and full-stack roles.",
-  },
-  {
-    id: 4,
-    name: "Atlassian",
-    website: "atlassian.com",
-    industry: "Software",
-    size: "5,000+",
-    headquarters: "Bengaluru",
-    notes: "Good fit for distributed systems and platform roles.",
-  },
-  {
-    id: 5,
-    name: "Notion",
-    website: "notion.so",
-    industry: "Productivity",
-    size: "500–1,000",
-    headquarters: "San Francisco",
-    notes: "Interested in product-focused engineering teams.",
-  },
-  {
-    id: 6,
-    name: "Microsoft",
-    website: "microsoft.com",
-    industry: "Technology",
-    size: "5,000+",
-    headquarters: "Noida",
-    notes: "Explore software engineering and AI roles.",
-  },
-];
+type CompanyPayload = {
+  name: string;
+  website: string | null;
+  industry: string | null;
+  size: string | null;
+  headquarters: string | null;
+  notes: string | null;
+};
 
 const emptyCompany: Omit<Company, "id"> = {
   name: "",
@@ -85,8 +38,34 @@ const industryOptions = [
   "Productivity",
 ];
 
+function mapCompanyToForm(data: Company): Company {
+  return {
+    id: data.id,
+    name: data.name ?? "",
+    website: data.website ?? "",
+    industry: data.industry ?? "",
+    size: data.size ?? "",
+    headquarters: data.headquarters ?? "",
+    notes: data.notes ?? "",
+  };
+}
+
+function mapFormToPayload(
+  data: Omit<Company, "id">,
+): CompanyPayload {
+  return {
+    name: data.name.trim(),
+    website: data.website.trim() || null,
+    industry: data.industry.trim() || null,
+    size: data.size.trim() || null,
+    headquarters: data.headquarters.trim() || null,
+    notes: data.notes.trim() || null,
+  };
+}
+
 function CompaniesPage() {
-  const [companies, setCompanies] = useState(initialCompanies);
+  const [companies, setCompanies] = useState<Company[]>([]);
+
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] =
     useState("All industries");
@@ -96,6 +75,14 @@ function CompaniesPage() {
     useState<Company | null>(null);
 
   const [form, setForm] = useState(emptyCompany);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingCompanyId, setDeletingCompanyId] =
+    useState<string | null>(null);
+
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const filteredCompanies = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -115,9 +102,36 @@ function CompaniesPage() {
     });
   }, [companies, search, industryFilter]);
 
+  useEffect(() => {
+    const loadCompanies = async () => {
+      setIsLoading(true);
+      setError("");
+
+      try {
+        const data = await apiRequest<Company[]>(
+          "/api/v1/companies",
+        );
+
+        setCompanies(data.map(mapCompanyToForm));
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load companies.",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCompanies();
+  }, []);
+
   const openAddModal = () => {
     setEditingCompany(null);
     setForm(emptyCompany);
+    setError("");
+    setSuccessMessage("");
     setIsModalOpen(true);
   };
 
@@ -133,10 +147,16 @@ function CompaniesPage() {
       notes: company.notes,
     });
 
+    setError("");
+    setSuccessMessage("");
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
+    if (isSaving) {
+      return;
+    }
+
     setIsModalOpen(false);
     setEditingCompany(null);
     setForm(emptyCompany);
@@ -150,43 +170,120 @@ function CompaniesPage() {
       ...current,
       [field]: value,
     }));
+
+    setError("");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) {
       return;
     }
 
-    if (editingCompany) {
-      setCompanies((current) =>
-        current.map((company) =>
-          company.id === editingCompany.id
-            ? {
-                ...company,
-                ...form,
-                name: form.name.trim(),
-              }
-            : company,
-        ),
-      );
-    } else {
-      setCompanies((current) => [
-        ...current,
-        {
-          id: Date.now(),
-          ...form,
-          name: form.name.trim(),
-        },
-      ]);
-    }
+    setIsSaving(true);
+    setError("");
+    setSuccessMessage("");
 
-    closeModal();
+    try {
+      const payload = mapFormToPayload(form);
+
+      if (editingCompany) {
+        const updatedCompany =
+          await apiRequest<Company>(
+            `/api/v1/companies/${editingCompany.id}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify(payload),
+            },
+          );
+
+        const updated = mapCompanyToForm(updatedCompany);
+
+        setCompanies((current) =>
+          current.map((company) =>
+            company.id === updated.id
+              ? updated
+              : company,
+          ),
+        );
+
+        setSuccessMessage("Company updated successfully.");
+      } else {
+        const createdCompany =
+          await apiRequest<Company>(
+            "/api/v1/companies",
+            {
+              method: "POST",
+              body: JSON.stringify(payload),
+            },
+          );
+
+        const created = mapCompanyToForm(createdCompany);
+
+        setCompanies((current) => [
+          ...current,
+          created,
+        ]);
+
+        setSuccessMessage("Company added successfully.");
+      }
+
+      setIsModalOpen(false);
+      setEditingCompany(null);
+      setForm(emptyCompany);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to save company.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = (id: number) => {
-    setCompanies((current) =>
-      current.filter((company) => company.id !== id),
+  const handleDelete = async (id: string) => {
+    const company = companies.find(
+      (item) => item.id === id,
     );
+
+    if (!company) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${company.name}?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingCompanyId(id);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await apiRequest<void>(
+        `/api/v1/companies/${id}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      setCompanies((current) =>
+        current.filter((item) => item.id !== id),
+      );
+
+      setSuccessMessage("Company deleted successfully.");
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to delete company.",
+      );
+    } finally {
+      setDeletingCompanyId(null);
+    }
   };
 
   return (
@@ -198,15 +295,40 @@ function CompaniesPage() {
           <h1>Companies</h1>
 
           <p className="companies-page-description">
-            Track companies you're interested in and keep your target
-            list organized.
+            Track companies you're interested in and keep your
+            target list organized.
           </p>
+
+          {isLoading && (
+            <p className="companies-page-description">
+              Loading companies...
+            </p>
+          )}
+
+          {error && (
+            <p
+              className="companies-page-description"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+
+          {successMessage && (
+            <p
+              className="companies-page-description"
+              role="status"
+            >
+              {successMessage}
+            </p>
+          )}
         </div>
 
         <button
           type="button"
           className="companies-add-button"
           onClick={openAddModal}
+          disabled={isLoading}
         >
           <span>+</span>
           Add Company
@@ -221,7 +343,9 @@ function CompaniesPage() {
             type="search"
             placeholder="Search companies..."
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
           />
         </div>
 
@@ -243,6 +367,7 @@ function CompaniesPage() {
         <div className="companies-content-header">
           <div>
             <h2>All Companies</h2>
+
             <p>
               {filteredCompanies.length}{" "}
               {filteredCompanies.length === 1
@@ -279,20 +404,24 @@ function CompaniesPage() {
                         <div>
                           <strong>{company.name}</strong>
 
-                          <span>{company.website}</span>
+                          <span>
+                            {company.website || "—"}
+                          </span>
                         </div>
                       </div>
                     </td>
 
                     <td>
                       <span className="company-industry">
-                        {company.industry}
+                        {company.industry || "—"}
                       </span>
                     </td>
 
-                    <td>{company.size}</td>
+                    <td>{company.size || "—"}</td>
 
-                    <td>{company.headquarters}</td>
+                    <td>
+                      {company.headquarters || "—"}
+                    </td>
 
                     <td>
                       <div className="company-row-actions">
@@ -300,6 +429,9 @@ function CompaniesPage() {
                           type="button"
                           onClick={() =>
                             openEditModal(company)
+                          }
+                          disabled={
+                            deletingCompanyId === company.id
                           }
                           aria-label={`Edit ${company.name}`}
                         >
@@ -312,9 +444,14 @@ function CompaniesPage() {
                           onClick={() =>
                             handleDelete(company.id)
                           }
+                          disabled={
+                            deletingCompanyId === company.id
+                          }
                           aria-label={`Delete ${company.name}`}
                         >
-                          Delete
+                          {deletingCompanyId === company.id
+                            ? "Deleting..."
+                            : "Delete"}
                         </button>
                       </div>
                     </td>
@@ -327,19 +464,27 @@ function CompaniesPage() {
           <div className="companies-empty-state">
             <div className="companies-empty-icon">⌂</div>
 
-            <h3>No companies found</h3>
+            <h3>
+              {isLoading
+                ? "Loading companies..."
+                : "No companies found"}
+            </h3>
 
-            <p>
-              Try changing your search or filters, or add a new
-              company to your target list.
-            </p>
+            {!isLoading && (
+              <>
+                <p>
+                  Try changing your search or filters, or add a new
+                  company to your target list.
+                </p>
 
-            <button
-              type="button"
-              onClick={openAddModal}
-            >
-              Add Company
-            </button>
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                >
+                  Add Company
+                </button>
+              </>
+            )}
           </div>
         )}
       </section>
@@ -348,7 +493,10 @@ function CompaniesPage() {
         <div
           className="company-modal-backdrop"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (
+              event.target === event.currentTarget &&
+              !isSaving
+            ) {
               closeModal();
             }
           }}
@@ -362,7 +510,9 @@ function CompaniesPage() {
             <div className="company-modal-header">
               <div>
                 <p className="company-modal-eyebrow">
-                  {editingCompany ? "EDIT COMPANY" : "NEW COMPANY"}
+                  {editingCompany
+                    ? "EDIT COMPANY"
+                    : "NEW COMPANY"}
                 </p>
 
                 <h2 id="company-modal-title">
@@ -376,6 +526,7 @@ function CompaniesPage() {
                 type="button"
                 className="company-modal-close"
                 onClick={closeModal}
+                disabled={isSaving}
                 aria-label="Close"
               >
                 ×
@@ -385,13 +536,18 @@ function CompaniesPage() {
             <div className="company-modal-body">
               <div className="company-form-grid">
                 <div className="company-form-field company-form-field-wide">
-                  <label htmlFor="company-name">Company Name</label>
+                  <label htmlFor="company-name">
+                    Company Name
+                  </label>
 
                   <input
                     id="company-name"
                     value={form.name}
                     onChange={(event) =>
-                      updateForm("name", event.target.value)
+                      updateForm(
+                        "name",
+                        event.target.value,
+                      )
                     }
                     placeholder="e.g. Stripe"
                   />
@@ -416,13 +572,18 @@ function CompaniesPage() {
                 </div>
 
                 <div className="company-form-field">
-                  <label htmlFor="company-size">Company Size</label>
+                  <label htmlFor="company-size">
+                    Company Size
+                  </label>
 
                   <input
                     id="company-size"
                     value={form.size}
                     onChange={(event) =>
-                      updateForm("size", event.target.value)
+                      updateForm(
+                        "size",
+                        event.target.value,
+                      )
                     }
                     placeholder="e.g. 500–1,000"
                   />
@@ -442,7 +603,7 @@ function CompaniesPage() {
                         event.target.value,
                       )
                     }
-                    placeholder="company.com"
+                    placeholder="https://company.com"
                   />
                 </div>
 
@@ -465,14 +626,19 @@ function CompaniesPage() {
                 </div>
 
                 <div className="company-form-field company-form-field-wide">
-                  <label htmlFor="company-notes">Notes</label>
+                  <label htmlFor="company-notes">
+                    Notes
+                  </label>
 
                   <textarea
                     id="company-notes"
                     rows={4}
                     value={form.notes}
                     onChange={(event) =>
-                      updateForm("notes", event.target.value)
+                      updateForm(
+                        "notes",
+                        event.target.value,
+                      )
                     }
                     placeholder="Anything you want to remember about this company..."
                   />
@@ -485,6 +651,7 @@ function CompaniesPage() {
                 type="button"
                 className="company-modal-cancel"
                 onClick={closeModal}
+                disabled={isSaving}
               >
                 Cancel
               </button>
@@ -493,11 +660,15 @@ function CompaniesPage() {
                 type="button"
                 className="company-modal-save"
                 onClick={handleSave}
-                disabled={!form.name.trim()}
+                disabled={
+                  !form.name.trim() || isSaving
+                }
               >
-                {editingCompany
-                  ? "Save Changes"
-                  : "Add Company"}
+                {isSaving
+                  ? "Saving..."
+                  : editingCompany
+                    ? "Save Changes"
+                    : "Add Company"}
               </button>
             </div>
           </div>
