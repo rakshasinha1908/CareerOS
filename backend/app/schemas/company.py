@@ -6,11 +6,7 @@ from pydantic import BaseModel, ConfigDict, HttpUrl
 
 class CompanyBase(BaseModel):
     name: str
-    website: HttpUrl | None = None
-    industry: str | None = None
-    size: str | None = None
-    headquarters: str | None = None
-    notes: str | None = None
+    career_url: HttpUrl
 
 
 class CompanyCreate(CompanyBase):
@@ -19,11 +15,7 @@ class CompanyCreate(CompanyBase):
 
 class CompanyUpdate(BaseModel):
     name: str | None = None
-    website: HttpUrl | None = None
-    industry: str | None = None
-    size: str | None = None
-    headquarters: str | None = None
-    notes: str | None = None
+    career_url: HttpUrl | None = None
 
 
 class CompanyResponse(CompanyBase):

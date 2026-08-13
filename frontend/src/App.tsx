@@ -6,7 +6,6 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import ProfilePage from "./pages/ProfilePage";
 import PreferencesPage from "./pages/PreferencesPage";
 import CompaniesPage from "./pages/CompaniesPage";
-import CareerSourcesPage from "./pages/CareerSourcesPage";
 import OpportunitiesPage from "./pages/OpportunitiesPage";
 
 function App() {
@@ -28,8 +27,6 @@ function App() {
         />
 
         <Route path="/companies" element={<CompaniesPage />} />
-
-        <Route path="/career-sources" element={<CareerSourcesPage />} />
 
         <Route
           path="/contacts"

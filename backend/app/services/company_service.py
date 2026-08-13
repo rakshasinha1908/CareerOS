@@ -5,15 +5,11 @@ from app.models.company import Company
 from app.schemas.company import CompanyCreate, CompanyUpdate
 
 
-URL_FIELDS = {"website"}
-
-
 def _serialize_company_data(data) -> dict:
     values = data.model_dump(exclude_unset=True)
 
-    for field in URL_FIELDS:
-        if field in values and values[field] is not None:
-            values[field] = str(values[field])
+    if "career_url" in values and values["career_url"] is not None:
+        values["career_url"] = str(values["career_url"])
 
     return values
 

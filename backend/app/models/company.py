@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -21,29 +21,9 @@ class Company(Base):
         unique=True,
     )
 
-    website: Mapped[str | None] = mapped_column(
+    career_url: Mapped[str] = mapped_column(
         String(500),
-        nullable=True,
-    )
-
-    industry: Mapped[str | None] = mapped_column(
-        String(150),
-        nullable=True,
-    )
-
-    size: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-    )
-
-    headquarters: Mapped[str | None] = mapped_column(
-        String(200),
-        nullable=True,
-    )
-
-    notes: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
+        nullable=False,
     )
 
     created_at: Mapped[datetime] = mapped_column(

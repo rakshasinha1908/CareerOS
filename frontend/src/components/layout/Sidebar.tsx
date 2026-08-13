@@ -4,7 +4,6 @@ import {
   Briefcase,
   FileText,
   Building2,
-  FolderOpen,
   Users,
   Folder,
   CircleUserRound,
@@ -19,7 +18,6 @@ const mainNavigation = [
   { label: "Opportunities", path: "/opportunities", icon: Briefcase },
   { label: "Applications", path: "/applications", icon: FileText },
   { label: "Companies", path: "/companies", icon: Building2 },
-  { label: "Career Sources", path: "/career-sources", icon: FolderOpen },
   { label: "Contacts", path: "/contacts", icon: Users },
   { label: "Documents", path: "/documents", icon: Folder },
 ];
