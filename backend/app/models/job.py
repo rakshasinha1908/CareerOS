@@ -1,0 +1,75 @@
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
+
+from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True,
+        default=uuid4,
+    )
+
+    company_id: Mapped[UUID] = mapped_column(
+        ForeignKey("companies.id"),
+        nullable=False,
+    )
+
+    title: Mapped[str] = mapped_column(
+        String(300),
+        nullable=False,
+    )
+
+    location: Mapped[str | None] = mapped_column(
+        String(300),
+        nullable=True,
+    )
+
+    url: Mapped[str] = mapped_column(
+        String(1000),
+        nullable=False,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    employment_type: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    experience_level: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    discovered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
