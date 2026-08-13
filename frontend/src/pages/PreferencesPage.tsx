@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "../styles/preferences-page.css";
+import { apiRequest } from "../api/client";
 
 type PreferencesForm = {
   preferredRoles: string[];
@@ -12,6 +13,34 @@ type PreferencesForm = {
   excludedKeywords: string[];
   minSalary: string;
   maxSalary: string;
+};
+
+type PreferencesResponse = {
+  id: string;
+  user_id: string;
+  preferred_roles: string[];
+  preferred_locations: string[];
+  remote_preference: string | null;
+  employment_types: string[];
+  experience_level: string | null;
+  required_skills: string[];
+  preferred_skills: string[];
+  excluded_keywords: string[];
+  min_salary: number | null;
+  max_salary: number | null;
+};
+
+type PreferencesPayload = {
+  preferred_roles: string[];
+  preferred_locations: string[];
+  remote_preference: string | null;
+  employment_types: string[];
+  experience_level: string | null;
+  required_skills: string[];
+  preferred_skills: string[];
+  excluded_keywords: string[];
+  min_salary: number | null;
+  max_salary: number | null;
 };
 
 const initialPreferences: PreferencesForm = {
@@ -54,16 +83,120 @@ const skillSuggestions = [
   "Docker",
 ];
 
+function mapResponseToForm(
+  data: PreferencesResponse,
+): PreferencesForm {
+  const remotePreference =
+    data.remote_preference === "Remote" ||
+    data.remote_preference === "Hybrid" ||
+    data.remote_preference === "On-site" ||
+    data.remote_preference === "Flexible"
+      ? data.remote_preference
+      : "Flexible";
+
+  return {
+    preferredRoles: data.preferred_roles ?? [],
+    preferredLocations: data.preferred_locations ?? [],
+    remotePreference,
+    employmentTypes: data.employment_types ?? [],
+    experienceLevel: data.experience_level ?? "Entry Level",
+    requiredSkills: data.required_skills ?? [],
+    preferredSkills: data.preferred_skills ?? [],
+    excludedKeywords: data.excluded_keywords ?? [],
+    minSalary:
+      data.min_salary !== null && data.min_salary !== undefined
+        ? String(data.min_salary)
+        : "",
+    maxSalary:
+      data.max_salary !== null && data.max_salary !== undefined
+        ? String(data.max_salary)
+        : "",
+  };
+}
+
+function mapFormToPayload(
+  data: PreferencesForm,
+): PreferencesPayload {
+  return {
+    preferred_roles: data.preferredRoles,
+    preferred_locations: data.preferredLocations,
+    remote_preference: data.remotePreference,
+    employment_types: data.employmentTypes,
+    experience_level: data.experienceLevel || null,
+    required_skills: data.requiredSkills,
+    preferred_skills: data.preferredSkills,
+    excluded_keywords: data.excludedKeywords,
+    min_salary:
+      data.minSalary.trim() === ""
+        ? null
+        : Number(data.minSalary),
+    max_salary:
+      data.maxSalary.trim() === ""
+        ? null
+        : Number(data.maxSalary),
+  };
+}
+
 function PreferencesPage() {
   const [preferences, setPreferences] =
     useState<PreferencesForm>(initialPreferences);
 
+  const [savedPreferences, setSavedPreferences] =
+    useState<PreferencesForm>(initialPreferences);
+
+  const [hasPreferences, setHasPreferences] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
   const [roleInput, setRoleInput] = useState("");
   const [locationInput, setLocationInput] = useState("");
   const [requiredSkillInput, setRequiredSkillInput] = useState("");
-  const [preferredSkillInput, setPreferredSkillInput] = useState("");
+  const [preferredSkillInput, setPreferredSkillInput] =
+    useState("");
   const [excludedKeywordInput, setExcludedKeywordInput] =
     useState("");
+
+  useEffect(() => {
+    const loadPreferences = async () => {
+      setIsLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      try {
+        const data =
+          await apiRequest<PreferencesResponse>(
+            "/api/v1/preferences",
+          );
+
+        const formData = mapResponseToForm(data);
+
+        setPreferences(formData);
+        setSavedPreferences(formData);
+        setHasPreferences(true);
+      } catch (requestError) {
+        const message =
+          requestError instanceof Error
+            ? requestError.message
+            : "Something went wrong";
+
+        if (
+          message.toLowerCase().includes("job preferences not found")
+        ) {
+          setPreferences(initialPreferences);
+          setSavedPreferences(initialPreferences);
+          setHasPreferences(false);
+        } else {
+          setError(message);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPreferences();
+  }, []);
 
   const updatePreferences = (
     updates: Partial<PreferencesForm>,
@@ -72,6 +205,8 @@ function PreferencesPage() {
       ...current,
       ...updates,
     }));
+
+    setSuccessMessage("");
   };
 
   const addItem = (
@@ -115,17 +250,60 @@ function PreferencesPage() {
   };
 
   const handleDiscard = () => {
-    setPreferences(initialPreferences);
+    setPreferences(savedPreferences);
+
     setRoleInput("");
     setLocationInput("");
     setRequiredSkillInput("");
     setPreferredSkillInput("");
     setExcludedKeywordInput("");
+
+    setError("");
+    setSuccessMessage("");
   };
 
-  const handleSave = () => {
-    // API integration will be added later.
-    console.log("Preferences saved:", preferences);
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const payload = mapFormToPayload(preferences);
+
+      const data = hasPreferences
+        ? await apiRequest<PreferencesResponse>(
+            "/api/v1/preferences",
+            {
+              method: "PATCH",
+              body: JSON.stringify(payload),
+            },
+          )
+        : await apiRequest<PreferencesResponse>(
+            "/api/v1/preferences",
+            {
+              method: "POST",
+              body: JSON.stringify(payload),
+            },
+          );
+
+      const savedForm = mapResponseToForm(data);
+
+      setPreferences(savedForm);
+      setSavedPreferences(savedForm);
+      setHasPreferences(true);
+
+      setSuccessMessage(
+        "Preferences saved successfully.",
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Failed to save preferences.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEnterAdd = (
@@ -160,6 +338,30 @@ function PreferencesPage() {
             Tell CareerOS what you're looking for so we can surface
             better opportunities.
           </p>
+
+          {isLoading && (
+            <p className="preferences-page-description">
+              Loading your preferences...
+            </p>
+          )}
+
+          {error && (
+            <p
+              className="preferences-page-description"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+
+          {successMessage && (
+            <p
+              className="preferences-page-description"
+              role="status"
+            >
+              {successMessage}
+            </p>
+          )}
         </div>
 
         <div className="preferences-header-actions">
@@ -167,6 +369,7 @@ function PreferencesPage() {
             type="button"
             className="preferences-button preferences-button-secondary"
             onClick={handleDiscard}
+            disabled={isSaving || isLoading}
           >
             Discard Changes
           </button>
@@ -175,8 +378,9 @@ function PreferencesPage() {
             type="button"
             className="preferences-button preferences-button-primary"
             onClick={handleSave}
+            disabled={isSaving || isLoading}
           >
-            Save Preferences
+            {isSaving ? "Saving..." : "Save Preferences"}
           </button>
         </div>
       </header>
@@ -392,9 +596,7 @@ function PreferencesPage() {
                       "Internship",
                     ].map((type) => {
                       const checked =
-                        preferences.employmentTypes.includes(
-                          type,
-                        );
+                        preferences.employmentTypes.includes(type);
 
                       return (
                         <label
@@ -482,10 +684,7 @@ function PreferencesPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            removeItem(
-                              "requiredSkills",
-                              skill,
-                            )
+                            removeItem("requiredSkills", skill)
                           }
                           aria-label={`Remove ${skill}`}
                         >
@@ -517,9 +716,7 @@ function PreferencesPage() {
                   {skillSuggestions
                     .filter(
                       (skill) =>
-                        !preferences.requiredSkills.includes(
-                          skill,
-                        ),
+                        !preferences.requiredSkills.includes(skill),
                     )
                     .map((skill) => (
                       <button
@@ -553,10 +750,7 @@ function PreferencesPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            removeItem(
-                              "preferredSkills",
-                              skill,
-                            )
+                            removeItem("preferredSkills", skill)
                           }
                           aria-label={`Remove ${skill}`}
                         >
