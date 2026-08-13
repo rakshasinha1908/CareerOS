@@ -1,24 +1,3 @@
-// import { BrowserRouter, Route, Routes } from "react-router-dom";
-
-// import AppShell from "./components/layout/AppShell";
-// import OverviewPage from "./pages/OverviewPage";
-
-// function App() {
-//   return (
-//     <BrowserRouter>
-//       <Routes>
-//         <Route element={<AppShell />}>
-//           <Route path="/" element={<OverviewPage />} />
-//         </Route>
-//       </Routes>
-//     </BrowserRouter>
-//   );
-// }
-
-// export default App;
-
-
-
 import { Routes, Route } from "react-router-dom";
 
 import AppShell from "./components/layout/AppShell";
@@ -26,6 +5,9 @@ import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import ProfilePage from "./pages/ProfilePage";
 import PreferencesPage from "./pages/PreferencesPage";
+import CompaniesPage from "./pages/CompaniesPage";
+import CareerSourcesPage from "./pages/CareerSourcesPage";
+import OpportunitiesPage from "./pages/OpportunitiesPage";
 
 function App() {
   return (
@@ -33,15 +15,7 @@ function App() {
       <Route element={<AppShell />}>
         <Route path="/" element={<OverviewPage />} />
 
-        <Route
-          path="/opportunities"
-          element={
-            <PlaceholderPage
-              title="Opportunities"
-              description="Discover and manage opportunities that match your career goals."
-            />
-          }
-        />
+        <Route path="/opportunities" element={<OpportunitiesPage />} />
 
         <Route
           path="/applications"
@@ -53,25 +27,9 @@ function App() {
           }
         />
 
-        <Route
-          path="/companies"
-          element={
-            <PlaceholderPage
-              title="Companies"
-              description="Manage the companies you're targeting and keep important details in one place."
-            />
-          }
-        />
+        <Route path="/companies" element={<CompaniesPage />} />
 
-        <Route
-          path="/career-sources"
-          element={
-            <PlaceholderPage
-              title="Career Sources"
-              description="Monitor career pages and other sources for new opportunities."
-            />
-          }
-        />
+        <Route path="/career-sources" element={<CareerSourcesPage />} />
 
         <Route
           path="/contacts"
