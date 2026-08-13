@@ -354,3 +354,38 @@
     width: 100%;
   }
 }
+
+
+.profile-message {
+  margin: -14px 0 24px;
+  padding: 11px 13px;
+  border: 1px solid;
+  font-size: 12px;
+}
+
+.profile-message-error {
+  border-color: #e5c7c5;
+  background: #fffafa;
+  color: #a52f2b;
+}
+
+.profile-message-success {
+  border-color: #b9dfce;
+  background: #f2fbf7;
+  color: #087451;
+}
+
+.profile-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.profile-loading-state {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+}
