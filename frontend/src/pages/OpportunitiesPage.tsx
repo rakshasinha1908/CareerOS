@@ -1,185 +1,97 @@
 import { useMemo, useState } from "react";
 import "../styles/opportunities-page.css";
 
-type Opportunity = {
-  id: number;
+type Job = {
+  id: string;
+  company_id: string;
   title: string;
-  company: string;
-  location: string;
-  remote: boolean;
-  experience: string;
-  source: string;
-  posted: string;
-  salary: string;
-  match: number;
-  status: "New" | "Saved" | "Applied";
-  tags: string[];
+  location: string | null;
+  url: string;
+  description: string | null;
+  employment_type: string | null;
+  experience_level: string | null;
+  posted_at: string | null;
+  discovered_at: string;
+  created_at: string;
+  updated_at: string;
 };
 
-const initialOpportunities: Opportunity[] = [
+const initialJobs: Job[] = [
   {
-    id: 1,
-    title: "Software Engineer — Backend",
-    company: "Microsoft",
-    location: "Noida, India",
-    remote: true,
-    experience: "0–2 years",
-    source: "Microsoft Careers",
-    posted: "2 hours ago",
-    salary: "₹12–18 LPA",
-    match: 94,
-    status: "New",
-    tags: ["Python", "FastAPI", "PostgreSQL"],
+    id: "1",
+    company_id: "company-1",
+    title: "Junior Software Engineer",
+    location: "Bengaluru, India",
+    url: "https://example.com/jobs/software-engineer",
+    description:
+      "Build backend systems using Python and FastAPI. Work with APIs, databases, and distributed systems.",
+    employment_type: "Full-time",
+    experience_level: "Entry",
+    posted_at: "2026-08-13T17:14:45.611Z",
+    discovered_at: "2026-08-13T17:11:08.372173Z",
+    created_at: "2026-08-13T17:11:08.372173Z",
+    updated_at: "2026-08-13T17:20:19.683851Z",
   },
   {
-    id: 2,
+    id: "2",
+    company_id: "company-2",
     title: "Software Development Engineer",
-    company: "Razorpay",
-    location: "Bengaluru, India",
-    remote: false,
-    experience: "0–2 years",
-    source: "Razorpay Careers",
-    posted: "5 hours ago",
-    salary: "₹10–16 LPA",
-    match: 91,
-    status: "New",
-    tags: ["Java", "Backend", "REST APIs"],
-  },
-  {
-    id: 3,
-    title: "Frontend Engineer",
-    company: "Atlassian",
-    location: "Bengaluru, India",
-    remote: true,
-    experience: "0–2 years",
-    source: "Atlassian Careers",
-    posted: "Yesterday",
-    salary: "₹14–22 LPA",
-    match: 88,
-    status: "Saved",
-    tags: ["React", "TypeScript", "CSS"],
-  },
-  {
-    id: 4,
-    title: "Full Stack Engineer",
-    company: "Linear",
-    location: "Remote",
-    remote: true,
-    experience: "1–3 years",
-    source: "Company Career Page",
-    posted: "Yesterday",
-    salary: "Not disclosed",
-    match: 86,
-    status: "New",
-    tags: ["React", "Node.js", "TypeScript"],
-  },
-  {
-    id: 5,
-    title: "Software Engineer — Platform",
-    company: "Stripe",
-    location: "Bengaluru, India",
-    remote: false,
-    experience: "1–3 years",
-    source: "Stripe Careers",
-    posted: "2 days ago",
-    salary: "₹16–25 LPA",
-    match: 82,
-    status: "Applied",
-    tags: ["Python", "Distributed Systems", "APIs"],
-  },
-  {
-    id: 6,
-    title: "AI Engineer",
-    company: "Y Combinator Startup",
-    location: "Remote",
-    remote: true,
-    experience: "0–2 years",
-    source: "Y Combinator Jobs",
-    posted: "2 days ago",
-    salary: "₹8–14 LPA",
-    match: 79,
-    status: "New",
-    tags: ["Python", "LLMs", "Machine Learning"],
+    location: "Noida, India",
+    url: "https://example.com/jobs/sde",
+    description:
+      "Develop scalable software systems and work closely with engineering teams.",
+    employment_type: "Full-time",
+    experience_level: "Entry",
+    posted_at: "2026-08-12T10:00:00.000Z",
+    discovered_at: "2026-08-13T11:00:00.000Z",
+    created_at: "2026-08-13T11:00:00.000Z",
+    updated_at: "2026-08-13T11:00:00.000Z",
   },
 ];
 
-const roleFilters = [
-  "All roles",
-  "Software Engineer",
-  "Backend",
-  "Frontend",
-  "Full Stack",
-  "AI Engineer",
-];
-
-const experienceFilters = [
-  "Any experience",
-  "0–2 years",
-  "1–3 years",
-  "3–5 years",
-];
-
-const sourceFilters = [
-  "All sources",
-  "Microsoft Careers",
-  "Razorpay Careers",
-  "Atlassian Careers",
-  "Company Career Page",
-  "Stripe Careers",
-  "Y Combinator Jobs",
-];
-
-function getRoleCategory(title: string) {
-  const value = title.toLowerCase();
-
-  if (value.includes("backend")) {
-    return "Backend";
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Not specified";
   }
 
-  if (value.includes("frontend")) {
-    return "Frontend";
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not specified";
   }
 
-  if (value.includes("full stack")) {
-    return "Full Stack";
-  }
-
-  if (value.includes("ai")) {
-    return "AI Engineer";
-  }
-
-  return "Software Engineer";
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function OpportunitiesPage() {
-  const [opportunities, setOpportunities] = useState(
-    initialOpportunities,
-  );
+  const [jobs, setJobs] = useState<Job[]>(initialJobs);
 
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("All roles");
-  const [location, setLocation] = useState("");
-  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [locationFilter, setLocationFilter] = useState("");
   const [experienceFilter, setExperienceFilter] =
     useState("Any experience");
-  const [sourceFilter, setSourceFilter] =
-    useState("All sources");
-  const [minMatch, setMinMatch] = useState(0);
+  const [employmentFilter, setEmploymentFilter] =
+    useState("Any employment");
 
-  const [selectedOpportunity, setSelectedOpportunity] =
-    useState<Opportunity | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(
+    initialJobs[0] ?? null,
+  );
 
-  const filteredOpportunities = useMemo(() => {
+  const filteredJobs = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const locationQuery = location.trim().toLowerCase();
+    const locationQuery = locationFilter.trim().toLowerCase();
 
-    return opportunities.filter((opportunity) => {
+    return jobs.filter((job) => {
       const searchableText = [
-        opportunity.title,
-        opportunity.company,
-        opportunity.location,
-        opportunity.source,
-        ...opportunity.tags,
+        job.title,
+        job.location ?? "",
+        job.description ?? "",
+        job.employment_type ?? "",
+        job.experience_level ?? "",
       ]
         .join(" ")
         .toLowerCase();
@@ -187,118 +99,50 @@ function OpportunitiesPage() {
       const matchesSearch =
         !query || searchableText.includes(query);
 
-      const matchesRole =
-        roleFilter === "All roles" ||
-        getRoleCategory(opportunity.title) === roleFilter;
-
       const matchesLocation =
         !locationQuery ||
-        opportunity.location
+        (job.location ?? "")
           .toLowerCase()
           .includes(locationQuery);
 
-      const matchesRemote =
-        !remoteOnly || opportunity.remote;
-
       const matchesExperience =
         experienceFilter === "Any experience" ||
-        opportunity.experience === experienceFilter;
+        job.experience_level === experienceFilter;
 
-      const matchesSource =
-        sourceFilter === "All sources" ||
-        opportunity.source === sourceFilter;
-
-      const matchesScore =
-        opportunity.match >= minMatch;
+      const matchesEmployment =
+        employmentFilter === "Any employment" ||
+        job.employment_type === employmentFilter;
 
       return (
         matchesSearch &&
-        matchesRole &&
         matchesLocation &&
-        matchesRemote &&
         matchesExperience &&
-        matchesSource &&
-        matchesScore
+        matchesEmployment
       );
     });
   }, [
-    opportunities,
+    jobs,
     search,
-    roleFilter,
-    location,
-    remoteOnly,
+    locationFilter,
     experienceFilter,
-    sourceFilter,
-    minMatch,
+    employmentFilter,
   ]);
-
-  const toggleSaved = (id: number) => {
-    setOpportunities((current) =>
-      current.map((opportunity) =>
-        opportunity.id === id
-          ? {
-              ...opportunity,
-              status:
-                opportunity.status === "Saved"
-                  ? "New"
-                  : "Saved",
-            }
-          : opportunity,
-      ),
-    );
-
-    setSelectedOpportunity((current) =>
-      current?.id === id
-        ? {
-            ...current,
-            status:
-              current.status === "Saved"
-                ? "New"
-                : "Saved",
-          }
-        : current,
-    );
-  };
-
-  const markApplied = (id: number) => {
-    setOpportunities((current) =>
-      current.map((opportunity) =>
-        opportunity.id === id
-          ? {
-              ...opportunity,
-              status: "Applied",
-            }
-          : opportunity,
-      ),
-    );
-
-    setSelectedOpportunity((current) =>
-      current?.id === id
-        ? {
-            ...current,
-            status: "Applied",
-          }
-        : current,
-    );
-  };
 
   const clearFilters = () => {
     setSearch("");
-    setRoleFilter("All roles");
-    setLocation("");
-    setRemoteOnly(false);
+    setLocationFilter("");
     setExperienceFilter("Any experience");
-    setSourceFilter("All sources");
-    setMinMatch(0);
+    setEmploymentFilter("Any employment");
   };
 
   const activeFilterCount =
-    Number(roleFilter !== "All roles") +
-    Number(Boolean(location)) +
-    Number(remoteOnly) +
+    Number(Boolean(locationFilter)) +
     Number(experienceFilter !== "Any experience") +
-    Number(sourceFilter !== "All sources") +
-    Number(minMatch > 0);
+    Number(employmentFilter !== "Any employment");
+
+  const selectJob = (job: Job) => {
+    setSelectedJob(job);
+  };
 
   return (
     <div className="opportunities-page">
@@ -311,13 +155,13 @@ function OpportunitiesPage() {
           <h1>Find your next move.</h1>
 
           <p className="opportunities-description">
-            Roles discovered from your career sources and matched
-            against your preferences.
+            Jobs discovered from the career pages you're
+            tracking.
           </p>
         </div>
 
         <div className="opportunities-header-meta">
-          <strong>{opportunities.length}</strong>
+          <strong>{jobs.length}</strong>
           <span>opportunities</span>
         </div>
       </header>
@@ -328,7 +172,7 @@ function OpportunitiesPage() {
 
           <input
             type="search"
-            placeholder="Search roles, companies, skills..."
+            placeholder="Search jobs, companies, skills..."
             value={search}
             onChange={(event) =>
               setSearch(event.target.value)
@@ -339,31 +183,17 @@ function OpportunitiesPage() {
 
       <section className="opportunities-filter-panel">
         <div className="opportunities-filter-group">
-          <label htmlFor="role-filter">Role</label>
-
-          <select
-            id="role-filter"
-            value={roleFilter}
-            onChange={(event) =>
-              setRoleFilter(event.target.value)
-            }
-          >
-            {roleFilters.map((filter) => (
-              <option key={filter}>{filter}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="opportunities-filter-group">
-          <label htmlFor="location-filter">Location</label>
+          <label htmlFor="location-filter">
+            Location
+          </label>
 
           <input
             id="location-filter"
             type="text"
             placeholder="e.g. Delhi"
-            value={location}
+            value={locationFilter}
             onChange={(event) =>
-              setLocation(event.target.value)
+              setLocationFilter(event.target.value)
             }
           />
         </div>
@@ -380,60 +210,33 @@ function OpportunitiesPage() {
               setExperienceFilter(event.target.value)
             }
           >
-            {experienceFilters.map((filter) => (
-              <option key={filter}>{filter}</option>
-            ))}
+            <option>Any experience</option>
+            <option>Entry</option>
+            <option>0–2 years</option>
+            <option>1–3 years</option>
+            <option>3–5 years</option>
+            <option>Mid</option>
+            <option>Senior</option>
           </select>
         </div>
 
         <div className="opportunities-filter-group">
-          <label htmlFor="source-filter">Source</label>
-
-          <select
-            id="source-filter"
-            value={sourceFilter}
-            onChange={(event) =>
-              setSourceFilter(event.target.value)
-            }
-          >
-            {sourceFilters.map((filter) => (
-              <option key={filter}>{filter}</option>
-            ))}
-          </select>
-        </div>
-
-        <label className="opportunities-remote-toggle">
-          <input
-            type="checkbox"
-            checked={remoteOnly}
-            onChange={(event) =>
-              setRemoteOnly(event.target.checked)
-            }
-          />
-
-          <span className="opportunities-toggle-track">
-            <span />
-          </span>
-
-          Remote only
-        </label>
-
-        <div className="opportunities-match-filter">
-          <label htmlFor="match-filter">
-            Match
+          <label htmlFor="employment-filter">
+            Employment
           </label>
 
           <select
-            id="match-filter"
-            value={minMatch}
+            id="employment-filter"
+            value={employmentFilter}
             onChange={(event) =>
-              setMinMatch(Number(event.target.value))
+              setEmploymentFilter(event.target.value)
             }
           >
-            <option value={0}>Any match</option>
-            <option value={80}>80%+</option>
-            <option value={85}>85%+</option>
-            <option value={90}>90%+</option>
+            <option>Any employment</option>
+            <option>Full-time</option>
+            <option>Part-time</option>
+            <option>Contract</option>
+            <option>Internship</option>
           </select>
         </div>
       </section>
@@ -441,8 +244,8 @@ function OpportunitiesPage() {
       <div className="opportunities-results-bar">
         <div>
           <strong>
-            {filteredOpportunities.length}{" "}
-            {filteredOpportunities.length === 1
+            {filteredJobs.length}{" "}
+            {filteredJobs.length === 1
               ? "result"
               : "results"}
           </strong>
@@ -469,104 +272,79 @@ function OpportunitiesPage() {
 
       <section className="opportunities-layout">
         <div className="opportunities-list">
-          {filteredOpportunities.length > 0 ? (
-            filteredOpportunities.map((opportunity) => (
+          {filteredJobs.length > 0 ? (
+            filteredJobs.map((job) => (
               <article
                 className={`opportunity-card ${
-                  selectedOpportunity?.id === opportunity.id
+                  selectedJob?.id === job.id
                     ? "selected"
                     : ""
                 }`}
-                key={opportunity.id}
-                onClick={() =>
-                  setSelectedOpportunity(opportunity)
-                }
+                key={job.id}
+                onClick={() => selectJob(job)}
               >
                 <div className="opportunity-card-main">
                   <div className="opportunity-company-mark">
-                    {opportunity.company
+                    {job.title
                       .charAt(0)
                       .toUpperCase()}
                   </div>
 
                   <div className="opportunity-card-info">
                     <div className="opportunity-title-row">
-                      <h2>{opportunity.title}</h2>
-
-                      {opportunity.status !== "New" && (
-                        <span
-                          className={`opportunity-status ${
-                            opportunity.status.toLowerCase()
-                          }`}
-                        >
-                          {opportunity.status}
-                        </span>
-                      )}
+                      <h2>{job.title}</h2>
                     </div>
 
                     <p className="opportunity-company">
-                      {opportunity.company}
+                      Company
                     </p>
 
                     <div className="opportunity-meta">
+                      {job.location && (
+                        <>
+                          <span>{job.location}</span>
+                          <span>•</span>
+                        </>
+                      )}
+
+                      {job.employment_type && (
+                        <>
+                          <span>
+                            {job.employment_type}
+                          </span>
+                          <span>•</span>
+                        </>
+                      )}
+
                       <span>
-                        {opportunity.location}
-                      </span>
-
-                      <span>•</span>
-
-                      <span>
-                        {opportunity.experience}
-                      </span>
-
-                      <span>•</span>
-
-                      <span>
-                        {opportunity.posted}
+                        {formatDate(job.posted_at)}
                       </span>
                     </div>
 
-                    <div className="opportunity-tags">
-                      {opportunity.tags.map((tag) => (
-                        <span key={tag}>{tag}</span>
-                      ))}
-                    </div>
+                    {job.experience_level && (
+                      <div className="opportunity-tags">
+                        <span>
+                          {job.experience_level}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="opportunity-card-side">
-                  <div
-                    className={`opportunity-match match-${Math.floor(
-                      opportunity.match / 5,
-                    ) * 5}`}
-                  >
-                    <strong>
-                      {opportunity.match}%
-                    </strong>
-
-                    <span>match</span>
-                  </div>
-
                   <button
                     type="button"
-                    className={`opportunity-save ${
-                      opportunity.status === "Saved"
-                        ? "saved"
-                        : ""
-                    }`}
+                    className="opportunity-open-link"
                     onClick={(event) => {
                       event.stopPropagation();
-                      toggleSaved(opportunity.id);
+                      window.open(
+                        job.url,
+                        "_blank",
+                        "noopener,noreferrer",
+                      );
                     }}
-                    aria-label={
-                      opportunity.status === "Saved"
-                        ? "Remove from saved"
-                        : "Save opportunity"
-                    }
                   >
-                    {opportunity.status === "Saved"
-                      ? "★"
-                      : "☆"}
+                    View job →
                   </button>
                 </div>
               </article>
@@ -580,8 +358,8 @@ function OpportunitiesPage() {
               <h2>No opportunities found</h2>
 
               <p>
-                Try adjusting your search or filters to see
-                more roles.
+                Try adjusting your search or filters to
+                see more roles.
               </p>
 
               <button
@@ -595,11 +373,11 @@ function OpportunitiesPage() {
         </div>
 
         <aside className="opportunity-detail-panel">
-          {selectedOpportunity ? (
+          {selectedJob ? (
             <>
               <div className="opportunity-detail-header">
                 <div className="opportunity-detail-company-mark">
-                  {selectedOpportunity.company
+                  {selectedJob.title
                     .charAt(0)
                     .toUpperCase()}
                 </div>
@@ -608,7 +386,7 @@ function OpportunitiesPage() {
                   type="button"
                   className="opportunity-detail-close"
                   onClick={() =>
-                    setSelectedOpportunity(null)
+                    setSelectedJob(null)
                   }
                   aria-label="Close opportunity details"
                 >
@@ -618,125 +396,90 @@ function OpportunitiesPage() {
 
               <div className="opportunity-detail-content">
                 <p className="opportunity-detail-eyebrow">
-                  {selectedOpportunity.source}
+                  JOB OPPORTUNITY
                 </p>
 
-                <h2>{selectedOpportunity.title}</h2>
+                <h2>{selectedJob.title}</h2>
 
                 <p className="opportunity-detail-company">
-                  {selectedOpportunity.company}
+                  Company
                 </p>
 
-                <div className="opportunity-detail-location">
-                  <span>
-                    {selectedOpportunity.location}
-                  </span>
-
-                  {selectedOpportunity.remote && (
-                    <span className="remote-badge">
-                      Remote
+                {selectedJob.location && (
+                  <div className="opportunity-detail-location">
+                    <span>
+                      {selectedJob.location}
                     </span>
-                  )}
-                </div>
-
-                <div className="opportunity-detail-match">
-                  <div>
-                    <span>CareerOS match</span>
-                    <strong>
-                      {selectedOpportunity.match}%
-                    </strong>
                   </div>
-
-                  <div className="match-bar">
-                    <span
-                      style={{
-                        width: `${selectedOpportunity.match}%`,
-                      }}
-                    />
-                  </div>
-
-                  <p>
-                    Strong alignment with your role,
-                    experience, and skills preferences.
-                  </p>
-                </div>
+                )}
 
                 <div className="opportunity-detail-grid">
                   <div>
                     <span>Experience</span>
                     <strong>
-                      {selectedOpportunity.experience}
+                      {selectedJob.experience_level ??
+                        "Not specified"}
                     </strong>
                   </div>
 
                   <div>
-                    <span>Salary</span>
+                    <span>Employment</span>
                     <strong>
-                      {selectedOpportunity.salary}
+                      {selectedJob.employment_type ??
+                        "Not specified"}
                     </strong>
                   </div>
 
                   <div>
                     <span>Posted</span>
                     <strong>
-                      {selectedOpportunity.posted}
+                      {formatDate(
+                        selectedJob.posted_at,
+                      )}
                     </strong>
                   </div>
 
                   <div>
-                    <span>Source</span>
+                    <span>Discovered</span>
                     <strong>
-                      {selectedOpportunity.source}
+                      {formatDate(
+                        selectedJob.discovered_at,
+                      )}
                     </strong>
                   </div>
                 </div>
 
                 <div className="opportunity-detail-section">
-                  <h3>Why this matches</h3>
+                  <h3>Description</h3>
 
-                  <div className="opportunity-detail-tags">
-                    {selectedOpportunity.tags.map(
-                      (tag) => (
-                        <span key={tag}>{tag}</span>
-                      ),
-                    )}
-                  </div>
+                  <p className="opportunity-description">
+                    {selectedJob.description ??
+                      "No description available."}
+                  </p>
+                </div>
+
+                <div className="opportunity-detail-section">
+                  <h3>Company</h3>
+
+                  <p className="opportunity-company-id">
+                    {selectedJob.company_id}
+                  </p>
                 </div>
               </div>
 
               <div className="opportunity-detail-actions">
                 <button
                   type="button"
-                  className="opportunity-detail-save"
-                  onClick={() =>
-                    toggleSaved(
-                      selectedOpportunity.id,
-                    )
-                  }
-                >
-                  {selectedOpportunity.status ===
-                  "Saved"
-                    ? "Remove from saved"
-                    : "Save opportunity"}
-                </button>
-
-                <button
-                  type="button"
                   className="opportunity-detail-apply"
                   onClick={() =>
-                    markApplied(
-                      selectedOpportunity.id,
+                    window.open(
+                      selectedJob.url,
+                      "_blank",
+                      "noopener,noreferrer",
                     )
                   }
-                  disabled={
-                    selectedOpportunity.status ===
-                    "Applied"
-                  }
                 >
-                  {selectedOpportunity.status ===
-                  "Applied"
-                    ? "Applied"
-                    : "Mark as applied"}
+                  Open job posting
                 </button>
               </div>
             </>
@@ -747,8 +490,8 @@ function OpportunitiesPage() {
               <h3>Select an opportunity</h3>
 
               <p>
-                Choose a role from the list to see its details,
-                match score, and actions.
+                Choose a role from the list to see its
+                details.
               </p>
             </div>
           )}
