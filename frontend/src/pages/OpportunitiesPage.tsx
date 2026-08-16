@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "../styles/opportunities-page.css";
+import { apiRequest } from "../api/client";
 
 type Job = {
   id: string;
@@ -15,39 +16,6 @@ type Job = {
   created_at: string;
   updated_at: string;
 };
-
-const initialJobs: Job[] = [
-  {
-    id: "1",
-    company_id: "company-1",
-    title: "Junior Software Engineer",
-    location: "Bengaluru, India",
-    url: "https://example.com/jobs/software-engineer",
-    description:
-      "Build backend systems using Python and FastAPI. Work with APIs, databases, and distributed systems.",
-    employment_type: "Full-time",
-    experience_level: "Entry",
-    posted_at: "2026-08-13T17:14:45.611Z",
-    discovered_at: "2026-08-13T17:11:08.372173Z",
-    created_at: "2026-08-13T17:11:08.372173Z",
-    updated_at: "2026-08-13T17:20:19.683851Z",
-  },
-  {
-    id: "2",
-    company_id: "company-2",
-    title: "Software Development Engineer",
-    location: "Noida, India",
-    url: "https://example.com/jobs/sde",
-    description:
-      "Develop scalable software systems and work closely with engineering teams.",
-    employment_type: "Full-time",
-    experience_level: "Entry",
-    posted_at: "2026-08-12T10:00:00.000Z",
-    discovered_at: "2026-08-13T11:00:00.000Z",
-    created_at: "2026-08-13T11:00:00.000Z",
-    updated_at: "2026-08-13T11:00:00.000Z",
-  },
-];
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -68,7 +36,11 @@ function formatDate(value: string | null) {
 }
 
 function OpportunitiesPage() {
-  const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
@@ -77,9 +49,29 @@ function OpportunitiesPage() {
   const [employmentFilter, setEmploymentFilter] =
     useState("Any employment");
 
-  const [selectedJob, setSelectedJob] = useState<Job | null>(
-    initialJobs[0] ?? null,
-  );
+  useEffect(() => {
+    async function loadJobs() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await apiRequest<Job[]>("/api/v1/jobs");
+
+        setJobs(data);
+        setSelectedJob(data[0] ?? null);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load opportunities",
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadJobs();
+  }, []);
 
   const filteredJobs = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -88,6 +80,7 @@ function OpportunitiesPage() {
     return jobs.filter((job) => {
       const searchableText = [
         job.title,
+        job.company_id,
         job.location ?? "",
         job.description ?? "",
         job.employment_type ?? "",
@@ -272,7 +265,17 @@ function OpportunitiesPage() {
 
       <section className="opportunities-layout">
         <div className="opportunities-list">
-          {filteredJobs.length > 0 ? (
+          {loading ? (
+            <div className="opportunities-empty">
+              <h2>Loading opportunities...</h2>
+            </div>
+          ) : error ? (
+            <div className="opportunities-empty">
+              <h2>Unable to load opportunities</h2>
+
+              <p>{error}</p>
+            </div>
+          ) : filteredJobs.length > 0 ? (
             filteredJobs.map((job) => (
               <article
                 className={`opportunity-card ${
@@ -296,7 +299,7 @@ function OpportunitiesPage() {
                     </div>
 
                     <p className="opportunity-company">
-                      Company
+                      {job.company_id}
                     </p>
 
                     <div className="opportunity-meta">
@@ -337,6 +340,7 @@ function OpportunitiesPage() {
                     className="opportunity-open-link"
                     onClick={(event) => {
                       event.stopPropagation();
+
                       window.open(
                         job.url,
                         "_blank",
@@ -402,7 +406,7 @@ function OpportunitiesPage() {
                 <h2>{selectedJob.title}</h2>
 
                 <p className="opportunity-detail-company">
-                  Company
+                  {selectedJob.company_id}
                 </p>
 
                 {selectedJob.location && (
