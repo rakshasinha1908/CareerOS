@@ -83,12 +83,33 @@ def _same_domain(base_url: str, candidate_url: str) -> bool:
 
 
 def _looks_like_job_url(url: str) -> bool:
-    path = urlparse(url).path.lower()
+    """
+    Determine whether a URL looks like an individual
+    job posting rather than a general career page.
+    """
 
-    return any(
-        pattern in path
-        for pattern in JOB_URL_PATTERNS
+    path = urlparse(url).path.lower().rstrip("/")
+
+    # ----------------------------------
+    # Explicit individual-job patterns
+    # ----------------------------------
+
+    individual_job_patterns = (
+        r"/jobs/[^/]+/[^/]+",
+        r"/job/[^/]+",
+        r"/jobs/results/\d+-",
+        r"/jobs/results/\d+",
+        r"/positions/[^/]+",
+        r"/openings/[^/]+",
+        r"/opening/[^/]+",
+        r"/career/[^/]+/[^/]+",
     )
+
+    for pattern in individual_job_patterns:
+        if re.search(pattern, path):
+            return True
+
+    return False
 
 
 def _looks_like_job_title(title: str) -> bool:
@@ -341,4 +362,323 @@ def discover_jobs(
 
     return _deduplicate_jobs(
         json_ld_jobs + anchor_jobs
+    )
+    
+    
+def _looks_like_job_listing_page(
+    text: str,
+    url: str,
+) -> bool:
+    """
+    Determine whether a URL appears to be a job
+    listing/search page rather than an individual
+    job page or general career navigation page.
+    """
+
+    normalized_text = _clean_text(text).lower()
+
+    parsed = urlparse(url)
+    path = parsed.path.lower().rstrip("/")
+
+    segments = [
+        segment
+        for segment in path.split("/")
+        if segment
+    ]
+
+    # ----------------------------------
+    # 1. Explicit listing/search signals
+    # ----------------------------------
+
+    listing_path_patterns = (
+        "/job-search",
+        "/job-search-results",
+        "/jobs/search",
+        "/jobs/results",
+        "/open-positions",
+        "/job-openings",
+        "/career-search",
+        "/careers/search",
+    )
+
+    if any(
+        pattern in path
+        for pattern in listing_path_patterns
+    ):
+        # A deeper path after /results/ is most
+        # likely an individual job posting.
+        if "/results/" in path:
+            return False
+
+        return True
+
+    # ----------------------------------
+    # 2. Exact listing pages
+    # ----------------------------------
+
+    listing_endings = {
+        "/jobs",
+        "/careers",
+        "/positions",
+        "/openings",
+    }
+
+    if path in listing_endings:
+        return True
+
+    # ----------------------------------
+    # 3. Listing-like link text
+    # ----------------------------------
+
+    listing_text = {
+        "jobs",
+        "view jobs",
+        "view all jobs",
+        "see all jobs",
+        "search jobs",
+        "find jobs",
+        "job openings",
+        "open positions",
+        "all jobs",
+    }
+
+    if normalized_text in listing_text:
+        return True
+
+    # ----------------------------------
+    # 4. Generic search/results pages
+    # ----------------------------------
+
+    search_result_segments = {
+        "search",
+        "results",
+        "job-search",
+        "job-search-results",
+    }
+
+    if any(
+        segment in search_result_segments
+        for segment in segments
+    ):
+        return True
+
+    return False
+
+
+def discover_job_listing_pages(
+    career_url: str,
+) -> list[str]:
+    """
+    Find pages that appear to contain a company's
+    job listings or job search results.
+
+    This function does not extract individual jobs
+    and does not write to the database.
+    """
+
+    career_url = career_url.strip()
+
+    if not _is_valid_http_url(career_url):
+        raise ValueError(
+            "career_url must be a valid HTTP or HTTPS URL"
+        )
+
+    response = requests.get(
+        career_url,
+        timeout=REQUEST_TIMEOUT,
+        headers={
+            "User-Agent": (
+                "CareerOS/1.0 "
+                "(career page discovery)"
+            )
+        },
+        allow_redirects=True,
+    )
+
+    response.raise_for_status()
+
+    final_url = response.url
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser",
+    )
+
+    listing_pages: list[str] = []
+
+    for anchor in soup.find_all(
+        "a",
+        href=True,
+    ):
+        href = anchor.get("href")
+
+        if not href:
+            continue
+
+        absolute_url = urljoin(
+            final_url,
+            href,
+        )
+
+        if not _is_valid_http_url(
+            absolute_url
+        ):
+            continue
+
+        if not _same_domain(
+            final_url,
+            absolute_url,
+        ):
+            continue
+
+        text = _clean_text(
+            anchor.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        if not _looks_like_job_listing_page(
+            text,
+            absolute_url,
+        ):
+            continue
+
+        listing_pages.append(
+            absolute_url
+        )
+
+    return list(
+        dict.fromkeys(
+            url.rstrip("/")
+            for url in listing_pages
+        )
+    )
+    
+    
+def discover_job_links(
+    listing_url: str,
+) -> list[DiscoveredJob]:
+    """
+    Discover individual job posting links from a
+    job listing/search page.
+
+    This function only identifies candidate job links.
+    It does not fetch individual job pages, extract
+    descriptions, or write anything to the database.
+    """
+
+    listing_url = listing_url.strip()
+
+    if not _is_valid_http_url(listing_url):
+        raise ValueError(
+            "listing_url must be a valid HTTP or HTTPS URL"
+        )
+
+    response = requests.get(
+        listing_url,
+        timeout=REQUEST_TIMEOUT,
+        headers={
+            "User-Agent": (
+                "CareerOS/1.0 "
+                "(job link discovery)"
+            )
+        },
+        allow_redirects=True,
+    )
+
+    response.raise_for_status()
+
+    final_url = response.url
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser",
+    )
+
+    discovered: list[DiscoveredJob] = []
+
+    for anchor in soup.find_all(
+        "a",
+        href=True,
+    ):
+        href = anchor.get("href")
+
+        if not href:
+            continue
+
+        absolute_url = urljoin(
+            final_url,
+            href,
+        )
+
+        if not _is_valid_http_url(
+            absolute_url
+        ):
+            continue
+
+        if not _same_domain(
+            final_url,
+            absolute_url,
+        ):
+            continue
+
+        title = _clean_text(
+            anchor.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        if not _looks_like_job_title(title):
+            continue
+
+        path = urlparse(
+            absolute_url
+        ).path.lower().rstrip("/")
+
+        # Individual job pages are usually deeper than
+        # the listing/search page.
+        if path == urlparse(
+            final_url
+        ).path.lower().rstrip("/"):
+            continue
+
+        # Avoid obvious navigation/account pages.
+        ignored_path_fragments = (
+            "/students",
+            "/teams",
+            "/how-we-hire",
+            "/dashboard",
+            "/recommendations",
+            "/saved",
+            "/alerts",
+            "/privacy",
+            "/privacy-policy",
+            "/eeo",
+        )
+
+        if any(
+            fragment in path
+            for fragment in ignored_path_fragments
+        ):
+            continue
+
+        # A candidate job URL should normally contain
+        # a job-related path and be deeper than the
+        # listing page.
+        if not _looks_like_job_url(
+            absolute_url
+        ):
+            continue
+
+        discovered.append(
+            DiscoveredJob(
+                title=title,
+                url=absolute_url,
+            )
+        )
+
+    return _deduplicate_jobs(
+        discovered
     )
