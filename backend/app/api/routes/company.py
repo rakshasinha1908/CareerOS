@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from app.services.job_service import sync_company_jobs
 
 from app.core.dependencies import get_db
 from app.schemas.company import (
@@ -34,6 +35,46 @@ def list_companies(
 ):
     return get_companies(db)
 
+@router.post(
+    "/{company_id}/sync",
+)
+def sync_company_jobs_for_company(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+):
+    company = get_company(db, company_id)
+
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found",
+        )
+
+    if not company.career_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Company does not have a career URL",
+        )
+
+    try:
+        return sync_company_jobs(
+            db,
+            company,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Unable to sync jobs from career page",
+        )
 
 @router.get(
     "/{company_id}",

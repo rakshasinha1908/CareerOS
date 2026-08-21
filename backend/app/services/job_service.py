@@ -1,3 +1,11 @@
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.company import Company
+from app.models.job import Job
+from app.services.career_service import discover_jobs
 from uuid import UUID
 
 from sqlalchemy import select
@@ -72,3 +80,65 @@ def delete_job(
 ) -> None:
     db.delete(job)
     db.commit()
+    
+    
+def sync_company_jobs(
+    db: Session,
+    company: Company,
+) -> dict:
+    """
+    Discover jobs from a company's career page and
+    persist new jobs.
+
+    V1 intentionally keeps this simple:
+    - discover jobs
+    - avoid duplicate URLs
+    - create new Job records
+    """
+
+    if not company.career_url:
+        raise ValueError(
+            "Company does not have a career URL"
+        )
+
+    discovered_jobs = discover_jobs(
+        company.career_url
+    )
+
+    created_jobs: list[Job] = []
+    skipped_jobs = 0
+
+    for discovered in discovered_jobs:
+        existing_job = db.scalar(
+            select(Job).where(
+                Job.company_id == company.id,
+                Job.url == discovered.url,
+            )
+        )
+
+        if existing_job is not None:
+            skipped_jobs += 1
+            continue
+
+        job = Job(
+            company_id=company.id,
+            title=discovered.title,
+            url=discovered.url,
+            discovered_at=datetime.now(
+                timezone.utc
+            ),
+        )
+
+        db.add(job)
+        created_jobs.append(job)
+
+    db.commit()
+
+    for job in created_jobs:
+        db.refresh(job)
+
+    return {
+        "discovered": len(discovered_jobs),
+        "created": len(created_jobs),
+        "skipped": skipped_jobs,
+    }
