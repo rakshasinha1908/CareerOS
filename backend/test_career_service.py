@@ -1,35 +1,23 @@
-from pathlib import Path
-import re
+from app.services.career_service import discover_jobs
 
 
-html = Path(
-    "google_careers_response.html"
-).read_text(
-    encoding="utf-8"
+career_url = (
+    "https://www.google.com/about/careers/applications/jobs/results"
 )
 
-matches = list(
-    re.finditer(
-        r"/jobs/results/",
-        html,
-        flags=re.IGNORECASE,
-    )
-)
+
+jobs = discover_jobs(career_url)
+
 
 print()
 print("=" * 60)
-print(f"Found {len(matches)} occurrences")
+print(f"FOUND {len(jobs)} CANDIDATE JOBS")
 print("=" * 60)
 
-for index, match in enumerate(matches, start=1):
-    start = max(0, match.start() - 500)
-    end = min(
-        len(html),
-        match.end() + 1000,
-    )
-
+for job in jobs[:20]:
     print()
-    print("-" * 60)
-    print(f"OCCURRENCE {index}")
-    print("-" * 60)
-    print(html[start:end])
+    print("TITLE :", job.title)
+    print("URL   :", job.url)
+
+print()
+print("=" * 60)

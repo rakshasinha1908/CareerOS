@@ -354,13 +354,6 @@ def _extract_anchor_jobs(
         if not href:
             continue
 
-        title = _clean_text(
-            anchor.get_text(
-                " ",
-                strip=True,
-            )
-        )
-
         absolute_url = urljoin(
             career_url,
             href,
@@ -375,6 +368,32 @@ def _extract_anchor_jobs(
             career_url,
             absolute_url,
         ):
+            continue
+
+        # Prefer aria-label because many modern
+        # career pages use visually empty links
+        # with accessible job titles.
+        title = _clean_text(
+            anchor.get("aria-label")
+        )
+
+        if title.lower().startswith(
+            "learn more about "
+        ):
+            title = title[
+                len("learn more about "):
+            ]
+
+        # Fall back to visible link text.
+        if not title:
+            title = _clean_text(
+                anchor.get_text(
+                    " ",
+                    strip=True,
+                )
+            )
+
+        if not title:
             continue
 
         # Use the closest meaningful parent as context.
