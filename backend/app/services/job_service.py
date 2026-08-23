@@ -1,18 +1,16 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.company import Company
 from app.models.job import Job
-from app.services.career_service import discover_jobs
-from uuid import UUID
-
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from app.models.job import Job
 from app.schemas.job import JobCreate, JobUpdate
+from app.services.career_service import discover_jobs
+from app.services.job_details_service import (
+    fetch_job_details,
+)
 
 
 def _serialize_job_data(data) -> dict:
@@ -80,20 +78,22 @@ def delete_job(
 ) -> None:
     db.delete(job)
     db.commit()
-    
-    
+
+
 def sync_company_jobs(
     db: Session,
     company: Company,
 ) -> dict:
     """
     Discover jobs from a company's career page and
-    persist new jobs.
+    persist new jobs with available job details.
 
     V1 intentionally keeps this simple:
     - discover jobs
     - avoid duplicate URLs
+    - extract details for new jobs
     - create new Job records
+    - skip already-known jobs
     """
 
     if not company.career_url:
@@ -109,6 +109,7 @@ def sync_company_jobs(
     skipped_jobs = 0
 
     for discovered in discovered_jobs:
+
         existing_job = db.scalar(
             select(Job).where(
                 Job.company_id == company.id,
@@ -120,10 +121,71 @@ def sync_company_jobs(
             skipped_jobs += 1
             continue
 
+        # -------------------------------------------------
+        # Extract details from the individual job page
+        # Make sync resilient to broken job pages
+        # -------------------------------------------------
+        try:
+            details = fetch_job_details(
+                discovered.url
+            )
+
+            print()
+            print("DETAILS:", discovered.title)
+            print("  location:", details.location)
+            print("  experience:", details.experience_level)
+            print("  description:", bool(details.description))
+
+        except Exception as exc:
+            print()
+            print("DETAIL FETCH FAILED:", discovered.url)
+            print("ERROR:", repr(exc))
+
+            details = None
+
         job = Job(
             company_id=company.id,
-            title=discovered.title,
+            title=(
+                details.title
+                if details and details.title
+                else discovered.title
+            ),
+            location=(
+                details.location
+                if details
+                else None
+            ),
             url=discovered.url,
+            description=(
+                details.description
+                if details
+                else None
+            ),
+            about_the_job=(
+                details.about_the_job
+                if details
+                else None
+            ),
+            responsibilities=(
+                details.responsibilities
+                if details
+                else None
+            ),
+            minimum_qualifications=(
+                details.minimum_qualifications
+                if details
+                else None
+            ),
+            preferred_qualifications=(
+                details.preferred_qualifications
+                if details
+                else None
+            ),
+            experience_level=(
+                details.experience_level
+                if details
+                else None
+            ),
             discovered_at=datetime.now(
                 timezone.utc
             ),

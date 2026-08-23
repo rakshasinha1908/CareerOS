@@ -53,6 +53,49 @@ def _same_domain(
     )
 
 
+def _resolve_url(
+    soup: BeautifulSoup,
+    page_url: str,
+    href: str,
+) -> str:
+    """
+    Resolve a relative URL using the page's <base> tag
+    when available.
+
+    This is important for career pages where relative
+    links are resolved against a base URL that differs
+    from the visible page URL.
+    """
+
+    href = href.strip()
+
+    base_tag = soup.find(
+        "base",
+        href=True,
+    )
+
+    if base_tag:
+        base_href = str(
+            base_tag.get("href")
+        ).strip()
+
+        if base_href:
+            base_url = urljoin(
+                page_url,
+                base_href,
+            )
+
+            return urljoin(
+                base_url,
+                href,
+            )
+
+    return urljoin(
+        page_url,
+        href,
+    )
+
+
 # --------------------------------------------------
 # Job heuristics
 # --------------------------------------------------
@@ -314,7 +357,8 @@ def _extract_json_ld_jobs(
             if not title or not url:
                 continue
 
-            absolute_url = urljoin(
+            absolute_url = _resolve_url(
+                soup,
                 career_url,
                 str(url),
             )
@@ -354,9 +398,10 @@ def _extract_anchor_jobs(
         if not href:
             continue
 
-        absolute_url = urljoin(
+        absolute_url = _resolve_url(
+            soup,
             career_url,
-            href,
+            str(href),
         )
 
         if not _is_valid_http_url(
@@ -398,7 +443,12 @@ def _extract_anchor_jobs(
 
         # Use the closest meaningful parent as context.
         parent = anchor.find_parent(
-            ["li", "article", "div", "section"]
+            [
+                "li",
+                "article",
+                "div",
+                "section",
+            ]
         )
 
         context = ""
@@ -468,9 +518,10 @@ def _find_listing_link(
             )
         ).lower()
 
-        absolute_url = urljoin(
+        absolute_url = _resolve_url(
+            soup,
             career_url,
-            href,
+            str(href),
         )
 
         if not _is_valid_http_url(
@@ -547,7 +598,7 @@ def _deduplicate_jobs(
 
 
 # --------------------------------------------------
-# Main V1 discovery service
+# HTTP fetching
 # --------------------------------------------------
 
 
@@ -575,6 +626,193 @@ def _fetch_page(
             "html.parser",
         ),
     )
+
+
+# --------------------------------------------------
+# JSON-LD job detail extraction
+# --------------------------------------------------
+
+
+def _extract_json_ld_job_details(
+    soup: BeautifulSoup,
+) -> dict:
+    details = {}
+
+    scripts = soup.find_all(
+        "script",
+        attrs={
+            "type": "application/ld+json"
+        },
+    )
+
+    for script in scripts:
+        raw = script.string or script.get_text()
+
+        if not raw.strip():
+            continue
+
+        try:
+            data = json.loads(raw)
+        except (
+            json.JSONDecodeError,
+            TypeError,
+        ):
+            continue
+
+        objects: list[dict] = []
+
+        if isinstance(data, dict):
+            objects.append(data)
+
+            graph = data.get("@graph")
+
+            if isinstance(graph, list):
+                objects.extend(
+                    item
+                    for item in graph
+                    if isinstance(item, dict)
+                )
+
+        elif isinstance(data, list):
+            objects.extend(
+                item
+                for item in data
+                if isinstance(item, dict)
+            )
+
+        for item in objects:
+            item_type = item.get("@type")
+
+            if isinstance(item_type, list):
+                is_job_posting = (
+                    "JobPosting" in item_type
+                )
+            else:
+                is_job_posting = (
+                    item_type == "JobPosting"
+                )
+
+            if not is_job_posting:
+                continue
+
+            details["title"] = _clean_text(
+                item.get("title")
+            ) or None
+
+            details["description"] = _clean_text(
+                item.get("description")
+            ) or None
+
+            details["employment_type"] = (
+                _clean_text(
+                    item.get("employmentType")
+                )
+                or None
+            )
+
+            details["posted_at"] = (
+                item.get("datePosted")
+                or None
+            )
+
+            # ------------------------------
+            # Location
+            # ------------------------------
+
+            location = item.get(
+                "jobLocation"
+            )
+
+            if isinstance(location, list):
+                location = (
+                    location[0]
+                    if location
+                    else None
+                )
+
+            if isinstance(location, dict):
+                address = location.get(
+                    "address"
+                )
+
+                if isinstance(address, dict):
+                    parts = [
+                        address.get(
+                            "addressLocality"
+                        ),
+                        address.get(
+                            "addressRegion"
+                        ),
+                        address.get(
+                            "addressCountry"
+                        ),
+                    ]
+
+                    parts = [
+                        _clean_text(str(part))
+                        for part in parts
+                        if part
+                    ]
+
+                    details["location"] = (
+                        ", ".join(parts)
+                        if parts
+                        else None
+                    )
+
+            return details
+
+    return {}
+
+
+def extract_job_details(
+    job_url: str,
+) -> dict:
+    """
+    Extract basic details from an individual
+    job posting page.
+
+    V1 is best-effort. Missing fields are
+    returned as None.
+    """
+
+    job_url = job_url.strip()
+
+    if not _is_valid_http_url(job_url):
+        raise ValueError(
+            "job_url must be a valid HTTP "
+            "or HTTPS URL"
+        )
+
+    _, soup = _fetch_page(
+        job_url
+    )
+
+    details = _extract_json_ld_job_details(
+        soup
+    )
+
+    return {
+        "title": details.get("title"),
+        "location": details.get("location"),
+        "description": details.get(
+            "description"
+        ),
+        "employment_type": details.get(
+            "employment_type"
+        ),
+        "experience_level": details.get(
+            "experience_level"
+        ),
+        "posted_at": details.get(
+            "posted_at"
+        ),
+    }
+
+
+# --------------------------------------------------
+# Main V1 discovery service
+# --------------------------------------------------
 
 
 def discover_jobs(
@@ -659,7 +897,9 @@ def discover_jobs(
         return []
 
     listing_final_url, listing_soup = (
-        _fetch_page(listing_url)
+        _fetch_page(
+            listing_url
+        )
     )
 
     jobs = _extract_json_ld_jobs(

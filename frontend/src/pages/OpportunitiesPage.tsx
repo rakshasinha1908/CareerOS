@@ -5,6 +5,7 @@ import { apiRequest } from "../api/client";
 type Job = {
   id: string;
   company_id: string;
+  company_name: string | null;
   title: string;
   location: string | null;
   url: string;
@@ -12,6 +13,11 @@ type Job = {
   employment_type: string | null;
   experience_level: string | null;
   posted_at: string | null;
+
+  minimum_qualifications: string | null;
+  preferred_qualifications: string | null;
+  responsibilities: string | null;
+
   discovered_at: string;
   created_at: string;
   updated_at: string;
@@ -33,6 +39,42 @@ function formatDate(value: string | null) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatSectionText(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function renderSectionContent(value: string | null) {
+  const text = formatSectionText(value);
+
+  if (!text) {
+    return (
+      <p className="opportunity-section-empty">
+        Not specified in the posting.
+      </p>
+    );
+  }
+
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="opportunity-section-content">
+      {lines.map((line, index) => (
+        <p key={`${line}-${index}`}>{line}</p>
+      ))}
+    </div>
+  );
 }
 
 function OpportunitiesPage() {
@@ -80,11 +122,14 @@ function OpportunitiesPage() {
     return jobs.filter((job) => {
       const searchableText = [
         job.title,
-        job.company_id,
+        job.company_name ?? "",
         job.location ?? "",
         job.description ?? "",
         job.employment_type ?? "",
         job.experience_level ?? "",
+        job.minimum_qualifications ?? "",
+        job.preferred_qualifications ?? "",
+        job.responsibilities ?? "",
       ]
         .join(" ")
         .toLowerCase();
@@ -288,7 +333,10 @@ function OpportunitiesPage() {
               >
                 <div className="opportunity-card-main">
                   <div className="opportunity-company-mark">
-                    {job.title
+                    {(
+                      job.company_name ||
+                      job.title
+                    )
                       .charAt(0)
                       .toUpperCase()}
                   </div>
@@ -299,7 +347,8 @@ function OpportunitiesPage() {
                     </div>
 
                     <p className="opportunity-company">
-                      {job.company_id}
+                      {job.company_name ??
+                        "Company not specified"}
                     </p>
 
                     <div className="opportunity-meta">
@@ -381,7 +430,10 @@ function OpportunitiesPage() {
             <>
               <div className="opportunity-detail-header">
                 <div className="opportunity-detail-company-mark">
-                  {selectedJob.title
+                  {(
+                    selectedJob.company_name ||
+                    selectedJob.title
+                  )
                     .charAt(0)
                     .toUpperCase()}
                 </div>
@@ -406,7 +458,8 @@ function OpportunitiesPage() {
                 <h2>{selectedJob.title}</h2>
 
                 <p className="opportunity-detail-company">
-                  {selectedJob.company_id}
+                  {selectedJob.company_name ??
+                    "Company not specified"}
                 </p>
 
                 {selectedJob.location && (
@@ -433,41 +486,30 @@ function OpportunitiesPage() {
                         "Not specified"}
                     </strong>
                   </div>
-
-                  <div>
-                    <span>Posted</span>
-                    <strong>
-                      {formatDate(
-                        selectedJob.posted_at,
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>Discovered</span>
-                    <strong>
-                      {formatDate(
-                        selectedJob.discovered_at,
-                      )}
-                    </strong>
-                  </div>
                 </div>
 
                 <div className="opportunity-detail-section">
-                  <h3>Description</h3>
+                  <h3>Minimum qualifications</h3>
 
-                  <p className="opportunity-description">
-                    {selectedJob.description ??
-                      "No description available."}
-                  </p>
+                  {renderSectionContent(
+                    selectedJob.minimum_qualifications,
+                  )}
                 </div>
 
                 <div className="opportunity-detail-section">
-                  <h3>Company</h3>
+                  <h3>Preferred qualifications</h3>
 
-                  <p className="opportunity-company-id">
-                    {selectedJob.company_id}
-                  </p>
+                  {renderSectionContent(
+                    selectedJob.preferred_qualifications,
+                  )}
+                </div>
+
+                <div className="opportunity-detail-section">
+                  <h3>Responsibilities</h3>
+
+                  {renderSectionContent(
+                    selectedJob.responsibilities,
+                  )}
                 </div>
               </div>
 

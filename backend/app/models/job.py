@@ -2,8 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
-
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
@@ -19,7 +18,19 @@ class Job(Base):
         ForeignKey("companies.id"),
         nullable=False,
     )
+    
+    company = relationship(
+        "Company",
+        lazy="joined",
+    )
+    
+    @property
+    def company_name(self) -> str | None:
+        if self.company is None:
+            return None
 
+        return self.company.name
+    
     title: Mapped[str] = mapped_column(
         String(300),
         nullable=False,
@@ -36,6 +47,26 @@ class Job(Base):
     )
 
     description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    about_the_job: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    responsibilities: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    minimum_qualifications: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    preferred_qualifications: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )

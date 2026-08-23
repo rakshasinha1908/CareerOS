@@ -32,6 +32,11 @@ class JobUpdate(BaseModel):
 
 class JobResponse(JobBase):
     id: UUID
+    company_name: str | None = None
+    about_the_job: str | None = None
+    responsibilities: str | None = None
+    minimum_qualifications: str | None = None
+    preferred_qualifications: str | None = None
     discovered_at: datetime
     created_at: datetime
     updated_at: datetime
