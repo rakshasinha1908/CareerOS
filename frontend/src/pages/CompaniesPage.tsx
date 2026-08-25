@@ -10,6 +10,12 @@ type Company = {
   updated_at: string;
 };
 
+type Job = {
+  id: string;
+  company_id: string;
+  title: string;
+};
+
 type CompanyForm = {
   name: string;
   career_url: string;
@@ -20,19 +26,25 @@ type CompanyPayload = {
   career_url: string;
 };
 
+type SyncResponse = {
+  discovered: number;
+  created: number;
+  skipped: number;
+};
+
+type SyncState = {
+  status: "syncing" | "success" | "error";
+  message: string;
+};
+
 const emptyCompany: CompanyForm = {
   name: "",
   career_url: "",
 };
 
-function mapCompanyToForm(data: Company): CompanyForm {
-  return {
-    name: data.name ?? "",
-    career_url: data.career_url ?? "",
-  };
-}
-
-function mapFormToPayload(data: CompanyForm): CompanyPayload {
+function mapFormToPayload(
+  data: CompanyForm,
+): CompanyPayload {
   return {
     name: data.name.trim(),
     career_url: data.career_url.trim(),
@@ -40,23 +52,86 @@ function mapFormToPayload(data: CompanyForm): CompanyPayload {
 }
 
 function CompaniesPage() {
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companies, setCompanies] = useState<Company[]>(
+    [],
+  );
+
+  const [jobs, setJobs] = useState<Job[]>([]);
 
   const [search, setSearch] = useState("");
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] =
+    useState(false);
+
   const [editingCompany, setEditingCompany] =
     useState<Company | null>(null);
 
-  const [form, setForm] = useState<CompanyForm>(emptyCompany);
+  const [form, setForm] =
+    useState<CompanyForm>(emptyCompany);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [isSaving, setIsSaving] =
+    useState(false);
+
   const [deletingCompanyId, setDeletingCompanyId] =
     useState<string | null>(null);
 
+  const [syncingCompanyId, setSyncingCompanyId] =
+    useState<string | null>(null);
+
+  const [syncStates, setSyncStates] =
+    useState<Record<string, SyncState>>({});
+
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+
+  const [successMessage, setSuccessMessage] =
+    useState("");
+
+  /*
+   * -------------------------------------------------
+   * Load companies + jobs
+   * -------------------------------------------------
+   */
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const [companiesData, jobsData] =
+        await Promise.all([
+          apiRequest<Company[]>(
+            "/api/v1/companies",
+          ),
+          apiRequest<Job[]>(
+            "/api/v1/jobs",
+          ),
+        ]);
+
+      setCompanies(companiesData);
+      setJobs(jobsData);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to load companies.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  /*
+   * -------------------------------------------------
+   * Filter companies
+   * -------------------------------------------------
+   */
 
   const filteredCompanies = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -67,36 +142,38 @@ function CompaniesPage() {
 
     return companies.filter((company) => {
       return (
-        company.name.toLowerCase().includes(query) ||
-        company.career_url.toLowerCase().includes(query)
+        company.name
+          .toLowerCase()
+          .includes(query) ||
+        company.career_url
+          .toLowerCase()
+          .includes(query)
       );
     });
   }, [companies, search]);
 
-  useEffect(() => {
-    const loadCompanies = async () => {
-      setIsLoading(true);
-      setError("");
+  /*
+   * -------------------------------------------------
+   * Job count per company
+   * -------------------------------------------------
+   */
 
-      try {
-        const data = await apiRequest<Company[]>(
-          "/api/v1/companies",
-        );
+  const jobCountByCompany = useMemo(() => {
+    const counts: Record<string, number> = {};
 
-        setCompanies(data);
-      } catch (requestError) {
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Unable to load companies.",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    for (const job of jobs) {
+      counts[job.company_id] =
+        (counts[job.company_id] ?? 0) + 1;
+    }
 
-    loadCompanies();
-  }, []);
+    return counts;
+  }, [jobs]);
+
+  /*
+   * -------------------------------------------------
+   * Add company
+   * -------------------------------------------------
+   */
 
   const openAddModal = () => {
     setEditingCompany(null);
@@ -106,7 +183,15 @@ function CompaniesPage() {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (company: Company) => {
+  /*
+   * -------------------------------------------------
+   * Edit company
+   * -------------------------------------------------
+   */
+
+  const openEditModal = (
+    company: Company,
+  ) => {
     setEditingCompany(company);
 
     setForm({
@@ -119,6 +204,12 @@ function CompaniesPage() {
     setIsModalOpen(true);
   };
 
+  /*
+   * -------------------------------------------------
+   * Close modal
+   * -------------------------------------------------
+   */
+
   const closeModal = () => {
     if (isSaving) {
       return;
@@ -128,6 +219,12 @@ function CompaniesPage() {
     setEditingCompany(null);
     setForm(emptyCompany);
   };
+
+  /*
+   * -------------------------------------------------
+   * Update form
+   * -------------------------------------------------
+   */
 
   const updateForm = (
     field: keyof CompanyForm,
@@ -141,8 +238,17 @@ function CompaniesPage() {
     setError("");
   };
 
+  /*
+   * -------------------------------------------------
+   * Save company
+   * -------------------------------------------------
+   */
+
   const handleSave = async () => {
-    if (!form.name.trim() || !form.career_url.trim()) {
+    if (
+      !form.name.trim() ||
+      !form.career_url.trim()
+    ) {
       return;
     }
 
@@ -151,7 +257,8 @@ function CompaniesPage() {
     setSuccessMessage("");
 
     try {
-      const payload = mapFormToPayload(form);
+      const payload =
+        mapFormToPayload(form);
 
       if (editingCompany) {
         const updatedCompany =
@@ -165,7 +272,8 @@ function CompaniesPage() {
 
         setCompanies((current) =>
           current.map((company) =>
-            company.id === updatedCompany.id
+            company.id ===
+            updatedCompany.id
               ? updatedCompany
               : company,
           ),
@@ -208,7 +316,15 @@ function CompaniesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  /*
+   * -------------------------------------------------
+   * Delete company
+   * -------------------------------------------------
+   */
+
+  const handleDelete = async (
+    id: string,
+  ) => {
     const company = companies.find(
       (item) => item.id === id,
     );
@@ -238,7 +354,15 @@ function CompaniesPage() {
       );
 
       setCompanies((current) =>
-        current.filter((item) => item.id !== id),
+        current.filter(
+          (item) => item.id !== id,
+        ),
+      );
+
+      setJobs((current) =>
+        current.filter(
+          (job) => job.company_id !== id,
+        ),
       );
 
       setSuccessMessage(
@@ -255,6 +379,102 @@ function CompaniesPage() {
     }
   };
 
+  /*
+   * -------------------------------------------------
+   * Sync company jobs
+   * -------------------------------------------------
+   */
+
+  const handleSync = async (
+    company: Company,
+  ) => {
+    if (syncingCompanyId) {
+      return;
+    }
+
+    setSyncingCompanyId(company.id);
+    setError("");
+    setSuccessMessage("");
+
+    setSyncStates((current) => ({
+      ...current,
+      [company.id]: {
+        status: "syncing",
+        message: "Syncing jobs...",
+      },
+    }));
+
+    try {
+      const result =
+        await apiRequest<SyncResponse>(
+          `/api/v1/companies/${company.id}/sync`,
+          {
+            method: "POST",
+          },
+        );
+
+      setSyncStates((current) => ({
+        ...current,
+        [company.id]: {
+          status: "success",
+          message:
+            result.created > 0
+              ? `${result.created} new ${
+                  result.created === 1
+                    ? "job"
+                    : "jobs"
+                } added`
+              : "No new jobs found",
+        },
+      }));
+
+      setSuccessMessage(
+        `${company.name}: ${result.discovered} jobs discovered, ${result.created} new.`,
+      );
+
+      /*
+       * Refresh jobs so the count beside the company
+       * updates immediately.
+       */
+      try {
+        const updatedJobs =
+          await apiRequest<Job[]>(
+            "/api/v1/jobs",
+          );
+
+        setJobs(updatedJobs);
+      } catch {
+        // The sync itself succeeded.
+        // A failed refresh should not show as a sync failure.
+      }
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to sync jobs.";
+
+      setSyncStates((current) => ({
+        ...current,
+        [company.id]: {
+          status: "error",
+          message: "Sync failed",
+        },
+      }));
+
+      setError(
+        `${company.name}: ${message}`,
+      );
+    } finally {
+      setSyncingCompanyId(null);
+    }
+  };
+
+  /*
+   * -------------------------------------------------
+   * Render
+   * -------------------------------------------------
+   */
+
   return (
     <div className="companies-page">
       <header className="companies-page-header">
@@ -266,8 +486,8 @@ function CompaniesPage() {
           <h1>Companies</h1>
 
           <p className="companies-page-description">
-            Keep track of the companies whose career
-            pages you want to follow.
+            Keep track of the companies whose
+            career pages you want to follow.
           </p>
 
           {isLoading && (
@@ -344,77 +564,147 @@ function CompaniesPage() {
                 <tr>
                   <th>Company</th>
                   <th>Career Page</th>
+                  <th>Jobs</th>
                   <th aria-label="Actions" />
                 </tr>
               </thead>
 
               <tbody>
-                {filteredCompanies.map((company) => (
-                  <tr key={company.id}>
-                    <td>
-                      <div className="company-name-cell">
-                        <div className="company-logo">
-                          {company.name
-                            .charAt(0)
-                            .toUpperCase()}
-                        </div>
+                {filteredCompanies.map(
+                  (company) => {
+                    const jobCount =
+                      jobCountByCompany[
+                        company.id
+                      ] ?? 0;
 
-                        <div>
-                          <strong>
-                            {company.name}
-                          </strong>
-                        </div>
-                      </div>
-                    </td>
+                    const syncState =
+                      syncStates[
+                        company.id
+                      ];
 
-                    <td>
-                      <a
-                        className="company-career-link"
-                        href={company.career_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {company.career_url}
-                      </a>
-                    </td>
+                    const isSyncing =
+                      syncingCompanyId ===
+                      company.id;
 
-                    <td>
-                      <div className="company-row-actions">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openEditModal(company)
-                          }
-                          disabled={
-                            deletingCompanyId ===
-                            company.id
-                          }
-                          aria-label={`Edit ${company.name}`}
-                        >
-                          Edit
-                        </button>
+                    return (
+                      <tr key={company.id}>
+                        <td>
+                          <div className="company-name-cell">
+                            <div className="company-logo">
+                              {company.name
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
 
-                        <button
-                          type="button"
-                          className="delete-action"
-                          onClick={() =>
-                            handleDelete(company.id)
-                          }
-                          disabled={
-                            deletingCompanyId ===
-                            company.id
-                          }
-                          aria-label={`Delete ${company.name}`}
-                        >
-                          {deletingCompanyId ===
-                          company.id
-                            ? "Deleting..."
-                            : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            <div>
+                              <strong>
+                                {company.name}
+                              </strong>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td>
+                          <a
+                            className="company-career-link"
+                            href={
+                              company.career_url
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {
+                              company.career_url
+                            }
+                          </a>
+                        </td>
+
+                        <td>
+                          <div className="company-jobs-cell">
+                            <strong>
+                              {jobCount}
+                            </strong>
+
+                            <span>
+                              {jobCount === 1
+                                ? "job"
+                                : "jobs"}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="company-row-actions">
+                            <button
+                              type="button"
+                              className="sync-action"
+                              onClick={() =>
+                                handleSync(
+                                  company,
+                                )
+                              }
+                              disabled={
+                                isSyncing ||
+                                deletingCompanyId ===
+                                  company.id
+                              }
+                            >
+                              {isSyncing
+                                ? "Syncing..."
+                                : "Sync"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEditModal(
+                                  company,
+                                )
+                              }
+                              disabled={
+                                isSyncing ||
+                                deletingCompanyId ===
+                                  company.id
+                              }
+                              aria-label={`Edit ${company.name}`}
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              className="delete-action"
+                              onClick={() =>
+                                handleDelete(
+                                  company.id,
+                                )
+                              }
+                              disabled={
+                                isSyncing ||
+                                deletingCompanyId ===
+                                  company.id
+                              }
+                              aria-label={`Delete ${company.name}`}
+                            >
+                              {deletingCompanyId ===
+                              company.id
+                                ? "Deleting..."
+                                : "Delete"}
+                            </button>
+                          </div>
+
+                          {syncState && (
+                            <div
+                              className={`company-sync-status company-sync-${syncState.status}`}
+                            >
+                              {syncState.message}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  },
+                )}
               </tbody>
             </table>
           </div>
@@ -457,7 +747,8 @@ function CompaniesPage() {
           className="company-modal-backdrop"
           onMouseDown={(event) => {
             if (
-              event.target === event.currentTarget &&
+              event.target ===
+                event.currentTarget &&
               !isSaving
             ) {
               closeModal();
@@ -524,7 +815,9 @@ function CompaniesPage() {
                   <input
                     id="company-career-url"
                     type="url"
-                    value={form.career_url}
+                    value={
+                      form.career_url
+                    }
                     onChange={(event) =>
                       updateForm(
                         "career_url",
@@ -570,6 +863,5 @@ function CompaniesPage() {
     </div>
   );
 }
-
 
 export default CompaniesPage;

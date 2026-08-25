@@ -266,6 +266,65 @@
   background: #fcebea;
 }
 
+.company-jobs-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 65px;
+}
+
+.company-jobs-cell strong {
+  color: #171c21;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.company-jobs-cell span {
+  color: #7b838c;
+  font-size: 10px;
+}
+
+.company-row-actions {
+  flex-wrap: wrap;
+}
+
+.company-row-actions .sync-action {
+  border: 1px solid #cfd4d9;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #343b42;
+}
+
+.company-row-actions .sync-action:hover {
+  border-color: #168a64;
+  background: #f1fbf7;
+  color: #168a64;
+}
+
+.company-row-actions .sync-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.company-sync-status {
+  width: 100%;
+  margin-top: 5px;
+  text-align: right;
+  font-size: 10px;
+}
+
+.company-sync-success {
+  color: #168a64;
+}
+
+.company-sync-error {
+  color: #b43732;
+}
+
+.company-sync-syncing {
+  color: #707982;
+}
+
 /* ---------------------------------- */
 /* Empty state */
 /* ---------------------------------- */
