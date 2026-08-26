@@ -38,6 +38,32 @@ def _is_valid_http_url(url: str) -> bool:
     )
 
 
+def _normalize_url(url: str) -> str:
+    """
+    Normalize a URL enough for safe comparison.
+
+    We intentionally keep query parameters because
+    some job URLs use them as part of the job identity.
+    """
+    parsed = urlparse(url)
+
+    return parsed._replace(
+        scheme=parsed.scheme.lower(),
+        netloc=parsed.netloc.lower(),
+        path=parsed.path.rstrip("/"),
+    ).geturl()
+
+
+def _same_url(
+    first_url: str,
+    second_url: str,
+) -> bool:
+    return (
+        _normalize_url(first_url)
+        == _normalize_url(second_url)
+    )
+
+
 def _same_domain(
     base_url: str,
     candidate_url: str,
@@ -288,13 +314,14 @@ def _looks_like_job_candidate(
 def _extract_json_ld_jobs(
     soup: BeautifulSoup,
     career_url: str,
+    current_page_url: str | None = None,
 ) -> list[DiscoveredJob]:
     discovered: list[DiscoveredJob] = []
 
     scripts = soup.find_all(
         "script",
         attrs={
-            "type": "application/ld+json"
+            "type": "application/ld+json",
         },
     )
 
@@ -368,6 +395,22 @@ def _extract_json_ld_jobs(
             ):
                 continue
 
+            # Never treat the page being inspected
+            # as another job.
+            if current_page_url and _same_url(
+                absolute_url,
+                current_page_url,
+            ):
+                continue
+
+            # Never treat the original career URL
+            # as a job.
+            if _same_url(
+                absolute_url,
+                career_url,
+            ):
+                continue
+
             discovered.append(
                 DiscoveredJob(
                     title=title,
@@ -386,6 +429,7 @@ def _extract_json_ld_jobs(
 def _extract_anchor_jobs(
     soup: BeautifulSoup,
     career_url: str,
+    current_page_url: str | None = None,
 ) -> list[DiscoveredJob]:
     discovered: list[DiscoveredJob] = []
 
@@ -412,6 +456,30 @@ def _extract_anchor_jobs(
         if not _same_domain(
             career_url,
             absolute_url,
+        ):
+            continue
+
+        # --------------------------------------------------
+        # IMPORTANT:
+        # Never treat the current career/listing page
+        # itself as a job.
+        #
+        # This prevents records such as:
+        #
+        # "Careers at Microsoft"
+        #
+        # from becoming fake jobs.
+        # --------------------------------------------------
+
+        if current_page_url and _same_url(
+            absolute_url,
+            current_page_url,
+        ):
+            continue
+
+        if _same_url(
+            absolute_url,
+            career_url,
         ):
             continue
 
@@ -535,6 +603,14 @@ def _find_listing_link(
         ):
             continue
 
+        # Do not select the career page itself
+        # as the listing page.
+        if _same_url(
+            absolute_url,
+            career_url,
+        ):
+            continue
+
         score = 0
 
         if title in LISTING_LINK_TEXT:
@@ -586,7 +662,9 @@ def _deduplicate_jobs(
     result: list[DiscoveredJob] = []
 
     for job in jobs:
-        normalized_url = job.url.rstrip("/")
+        normalized_url = _normalize_url(
+            job.url
+        )
 
         if normalized_url in seen_urls:
             continue
@@ -641,7 +719,7 @@ def _extract_json_ld_job_details(
     scripts = soup.find_all(
         "script",
         attrs={
-            "type": "application/ld+json"
+            "type": "application/ld+json",
         },
     )
 
@@ -859,6 +937,7 @@ def discover_jobs(
     jobs = _extract_json_ld_jobs(
         soup,
         final_url,
+        current_page_url=final_url,
     )
 
     if jobs:
@@ -873,6 +952,7 @@ def discover_jobs(
     jobs = _extract_anchor_jobs(
         soup,
         final_url,
+        current_page_url=final_url,
     )
 
     if jobs:
@@ -893,7 +973,10 @@ def discover_jobs(
     if not listing_url:
         return []
 
-    if listing_url.rstrip("/") == final_url.rstrip("/"):
+    if _same_url(
+        listing_url,
+        final_url,
+    ):
         return []
 
     listing_final_url, listing_soup = (
@@ -905,12 +988,14 @@ def discover_jobs(
     jobs = _extract_json_ld_jobs(
         listing_soup,
         listing_final_url,
+        current_page_url=listing_final_url,
     )
 
     if not jobs:
         jobs = _extract_anchor_jobs(
             listing_soup,
             listing_final_url,
+            current_page_url=listing_final_url,
         )
 
     return _deduplicate_jobs(
