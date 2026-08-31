@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.services.job_service import sync_company_jobs
+from app.services.job_sync_service import sync_company_jobs
 
 from app.core.dependencies import get_db
 from app.schemas.company import (

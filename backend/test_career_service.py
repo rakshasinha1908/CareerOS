@@ -2,7 +2,7 @@ from app.services.career_service import discover_jobs
 
 
 career_url = (
-    "https://www.google.com/about/careers/applications/jobs/results"
+    "https://apply.careers.microsoft.com/careers?start=0&pid=1970393556952487&sort_by=timestamp&filter_career_discipline=Software+Engineering"
 )
 
 
