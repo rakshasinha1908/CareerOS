@@ -11,7 +11,9 @@ from app.adapters.base import BaseAdapter, RawJob
 
 
 REQUEST_TIMEOUT = 20
-PAGE_SIZE = 20
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+MAX_PAGES = 500
 
 
 class WorkdayAdapter(BaseAdapter):
@@ -38,7 +40,7 @@ class WorkdayAdapter(BaseAdapter):
         company_config: dict[str, Any],
     ) -> bool:
         return (
-            company_config.get("platform", "").lower()
+            company_config.get("platform", "").strip().lower()
             == "workday"
         )
 
@@ -46,9 +48,7 @@ class WorkdayAdapter(BaseAdapter):
         self,
         company_config: dict[str, Any],
     ) -> list[RawJob]:
-        career_url = company_config.get(
-            "career_url"
-        )
+        career_url = company_config.get("career_url")
 
         if not career_url:
             raise ValueError(
@@ -56,8 +56,15 @@ class WorkdayAdapter(BaseAdapter):
                 "requires 'career_url'"
             )
 
-        config = self._parse_workday_url(
-            career_url
+        config = self._parse_workday_url(career_url)
+
+        adapter_config = (
+            company_config.get("adapter_config")
+            or {}
+        )
+
+        page_size = self._get_page_size(
+            adapter_config
         )
 
         jobs_url = (
@@ -72,16 +79,135 @@ class WorkdayAdapter(BaseAdapter):
         all_jobs: list[RawJob] = []
 
         offset = 0
-        total = None
+        total: int | None = None
+        page_number = 0
 
         while True:
+            page_number += 1
+
+            if page_number > MAX_PAGES:
+                raise RuntimeError(
+                    "Workday pagination exceeded the safety "
+                    f"limit of {MAX_PAGES} pages for "
+                    f"{company_config.get('name') or 'company'}"
+                )
+
             payload = {
                 "appliedFacets": {},
-                "limit": PAGE_SIZE,
+                "limit": page_size,
                 "offset": offset,
                 "searchText": "",
             }
 
+            response = self._request_jobs(
+                jobs_url=jobs_url,
+                payload=payload,
+                company_config=company_config,
+            )
+
+            data = self._parse_response(
+                response,
+                company_config,
+            )
+
+            postings = data.get("jobPostings")
+
+            if postings is None:
+                raise RuntimeError(
+                    "Workday response did not contain "
+                    "'jobPostings' for "
+                    f"{company_config.get('name') or 'company'}"
+                )
+
+            if not isinstance(postings, list):
+                raise RuntimeError(
+                    "Workday response contains an invalid "
+                    "'jobPostings' value for "
+                    f"{company_config.get('name') or 'company'}"
+                )
+
+            if total is None:
+                total = self._parse_total(
+                    data.get("total")
+                )
+
+            if not postings:
+                break
+
+            for job in postings:
+                if not isinstance(job, dict):
+                    continue
+
+                all_jobs.append(
+                    self._normalize_job(
+                        job,
+                        company_config,
+                        config,
+                    )
+                )
+
+            returned_count = len(postings)
+
+            # Advance by the number actually returned rather
+            # than assuming Workday honored the requested page size.
+            offset += returned_count
+
+            # If Workday tells us the total, stop once we've
+            # reached it.
+            if total is not None and offset >= total:
+                break
+
+            # A short page with no known total is the safest
+            # indication that there are no more results.
+            if total is None and returned_count < page_size:
+                break
+
+            # Workday public search endpoints can expose a
+            # maximum result window. If we hit exactly 2,000
+            # records and Workday still claims more exist,
+            # do NOT silently report the result as complete.
+            if (
+                total is not None
+                and total > offset
+                and offset >= 2000
+            ):
+                raise RuntimeError(
+                    "Workday returned only the first 2,000 "
+                    "results while reporting more available "
+                    f"jobs for "
+                    f"{company_config.get('name') or 'company'}. "
+                    "The search likely requires partitioning "
+                    "or additional Workday facets."
+                )
+
+        return all_jobs
+
+    @staticmethod
+    def _get_page_size(
+        adapter_config: dict[str, Any],
+    ) -> int:
+        value = adapter_config.get(
+            "page_size",
+            DEFAULT_PAGE_SIZE,
+        )
+
+        try:
+            page_size = int(value)
+        except (TypeError, ValueError):
+            page_size = DEFAULT_PAGE_SIZE
+
+        return max(
+            1,
+            min(page_size, MAX_PAGE_SIZE),
+        )
+
+    @staticmethod
+    def _request_jobs(
+        jobs_url: str,
+        payload: dict[str, Any],
+        company_config: dict[str, Any],
+    ) -> requests.Response:
+        try:
             response = requests.post(
                 jobs_url,
                 json=payload,
@@ -91,44 +217,141 @@ class WorkdayAdapter(BaseAdapter):
                         "CareerOS/1.0 "
                         "(job aggregation)"
                     ),
-                    "Content-Type": (
-                        "application/json"
-                    ),
+                    "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
             )
+        except requests.RequestException as exc:
+            raise RuntimeError(
+                "Unable to connect to Workday career "
+                f"endpoint for "
+                f"{company_config.get('name') or 'company'}: "
+                f"{exc}"
+            ) from exc
 
-            response.raise_for_status()
+        if response.ok:
+            return response
 
-            data = response.json()
+        company_name = (
+            company_config.get("name")
+            or "company"
+        )
 
-            postings = data.get(
-                "jobPostings",
-                [],
+        status_code = response.status_code
+
+        if status_code == 401:
+            raise RuntimeError(
+                f"Workday rejected the request with HTTP 401 "
+                f"(Unauthorized) for {company_name}. "
+                "The public jobs endpoint may require a "
+                "different configuration or access pattern."
             )
 
-            if total is None:
-                total = data.get("total")
+        if status_code == 403:
+            raise RuntimeError(
+                f"Workday rejected the request with HTTP 403 "
+                f"(Forbidden) for {company_name}. "
+                "The career site may be blocking automated "
+                "requests."
+            )
 
-            if not postings:
-                break
+        if status_code == 404:
+            raise RuntimeError(
+                f"Workday returned HTTP 404 (Not Found) for "
+                f"{company_name}. Verify the Workday tenant, "
+                "cluster, and career-site path."
+            )
 
-            for job in postings:
-                all_jobs.append(
-                    self._normalize_job(
-                        job,
-                        company_config,
-                        config,
-                    )
-                )
+        if status_code == 422:
+            detail = WorkdayAdapter._response_detail(
+                response
+            )
 
-            offset += PAGE_SIZE
+            raise RuntimeError(
+                f"Workday returned HTTP 422 "
+                f"(Unprocessable Entity) for "
+                f"{company_name}. "
+                f"{detail}"
+            )
 
-            if total is not None:
-                if offset >= total:
-                    break
+        detail = WorkdayAdapter._response_detail(
+            response
+        )
 
-        return all_jobs
+        raise RuntimeError(
+            f"Workday returned HTTP {status_code} for "
+            f"{company_name}. {detail}"
+        )
+
+    @staticmethod
+    def _parse_response(
+        response: requests.Response,
+        company_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise RuntimeError(
+                "Workday returned a non-JSON response for "
+                f"{company_config.get('name') or 'company'}"
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                "Workday returned an unexpected response "
+                f"format for "
+                f"{company_config.get('name') or 'company'}"
+            )
+
+        return data
+
+    @staticmethod
+    def _response_detail(
+        response: requests.Response,
+    ) -> str:
+        try:
+            data = response.json()
+
+            if isinstance(data, dict):
+                for key in (
+                    "error",
+                    "message",
+                    "errorMessage",
+                    "detail",
+                ):
+                    value = data.get(key)
+
+                    if value:
+                        return str(value)
+
+                return str(data)
+
+        except ValueError:
+            pass
+
+        text = (response.text or "").strip()
+
+        if text:
+            return text[:500]
+
+        return "No additional error details were provided."
+
+    @staticmethod
+    def _parse_total(
+        value: Any,
+    ) -> int | None:
+        if value is None:
+            return None
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+
+        if parsed < 0:
+            return None
+
+        return parsed
 
     def _normalize_job(
         self,
@@ -136,7 +359,6 @@ class WorkdayAdapter(BaseAdapter):
         company_config: dict[str, Any],
         config: dict[str, str],
     ) -> RawJob:
-
         title = (
             job.get("title")
             or ""
@@ -161,8 +383,10 @@ class WorkdayAdapter(BaseAdapter):
             job.get("postedOn")
         )
 
-        source_job_id = self._extract_source_job_id(
-            external_path
+        source_job_id = (
+            self._extract_source_job_id(
+                external_path
+            )
         )
 
         return RawJob(
@@ -188,10 +412,7 @@ class WorkdayAdapter(BaseAdapter):
     def _parse_workday_url(
         career_url: str,
     ) -> dict[str, str]:
-
-        parsed = urlparse(
-            career_url
-        )
+        parsed = urlparse(career_url)
 
         hostname = (
             parsed.hostname
@@ -233,19 +454,11 @@ class WorkdayAdapter(BaseAdapter):
         #
         # /external_experienced
         #
-        if len(path_parts) == 1:
-            site = path_parts[0]
-
-        else:
-            site = path_parts[-1]
+        site = path_parts[-1]
 
         return {
-            "tenant": match.group(
-                "tenant"
-            ),
-            "cluster": match.group(
-                "cluster"
-            ),
+            "tenant": match.group("tenant"),
+            "cluster": match.group("cluster"),
             "site": site,
         }
 
@@ -254,7 +467,6 @@ class WorkdayAdapter(BaseAdapter):
         config: dict[str, str],
         external_path: str,
     ) -> str:
-
         base_url = (
             f"https://{config['tenant']}."
             f"{config['cluster']}."
@@ -267,12 +479,8 @@ class WorkdayAdapter(BaseAdapter):
             external_path or ""
         )
 
-        if not external_path.startswith(
-            "/"
-        ):
-            external_path = (
-                "/" + external_path
-            )
+        if not external_path.startswith("/"):
+            external_path = "/" + external_path
 
         return (
             f"{base_url}/{site}"
@@ -283,19 +491,11 @@ class WorkdayAdapter(BaseAdapter):
     def _extract_source_job_id(
         external_path: str,
     ) -> str | None:
-
         if not external_path:
             return None
 
-        # Workday external paths frequently end
-        # with a requisition identifier such as:
-        #
-        # _R168948-1
-        # _R165568
-        #
         match = re.search(
-            r"_([A-Za-z0-9-]+)"
-            r"(?:/)?$",
+            r"_([A-Za-z0-9-]+)(?:/)?$",
             external_path,
         )
 
@@ -320,7 +520,8 @@ class WorkdayAdapter(BaseAdapter):
         For V1 we intentionally return None rather than
         pretending the date is exact.
 
-        We preserve the original value inside metadata.
+        The original value remains available in the raw
+        Workday metadata.
         """
 
         return None

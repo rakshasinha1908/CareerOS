@@ -9,6 +9,8 @@ class JobBase(BaseModel):
     title: str
     location: str | None = None
     url: HttpUrl
+    source: str | None = None
+    source_job_id: str | None = None
     description: str | None = None
     employment_type: str | None = None
     experience_level: str | None = None

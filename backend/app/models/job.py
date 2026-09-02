@@ -1,13 +1,34 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.db.base import Base
 
 
 class Job(Base):
     __tablename__ = "jobs"
+
+    __table_args__ = (
+        Index(
+            "ix_jobs_company_source_source_job_id",
+            "company_id",
+            "source",
+            "source_job_id",
+        ),
+        Index(
+            "ix_jobs_company_url",
+            "company_id",
+            "url",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         primary_key=True,
@@ -18,19 +39,19 @@ class Job(Base):
         ForeignKey("companies.id"),
         nullable=False,
     )
-    
+
     company = relationship(
         "Company",
         lazy="joined",
     )
-    
+
     @property
     def company_name(self) -> str | None:
         if self.company is None:
             return None
 
         return self.company.name
-    
+
     title: Mapped[str] = mapped_column(
         String(300),
         nullable=False,
@@ -44,6 +65,16 @@ class Job(Base):
     url: Mapped[str] = mapped_column(
         String(1000),
         nullable=False,
+    )
+
+    source: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    source_job_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
 
     description: Mapped[str | None] = mapped_column(
