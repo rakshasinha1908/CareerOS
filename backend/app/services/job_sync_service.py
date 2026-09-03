@@ -99,6 +99,11 @@ def sync_company_jobs(
                     title=discovered.title,
                     location=discovered.location,
                     url=job_url,
+
+                    # Source identity
+                    source=discovered.source,
+                    source_job_id=discovered.source_job_id,
+
                     description=discovered.description,
                     employment_type=(
                         discovered.employment_type
@@ -131,6 +136,24 @@ def sync_company_jobs(
             # -----------------------------------------------------
 
             changed = False
+
+            if (
+                discovered.source is not None
+                and existing_job.source
+                != discovered.source
+            ):
+                existing_job.source = discovered.source
+                changed = True
+
+            if (
+                discovered.source_job_id is not None
+                and existing_job.source_job_id
+                != discovered.source_job_id
+            ):
+                existing_job.source_job_id = (
+                    discovered.source_job_id
+                )
+                changed = True
 
             if (
                 discovered.title
