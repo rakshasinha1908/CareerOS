@@ -31,6 +31,11 @@ def sync_company_jobs(
         Database
 
     Existing jobs are updated when listing-level fields change.
+
+    The sync preloads existing jobs once instead of performing
+    one database lookup per discovered job. This is important
+    for companies with thousands of listings.
+
     Richer detail fields are preserved during listing sync so that
     a later detail-enrichment step can populate them safely.
     """
@@ -76,6 +81,26 @@ def sync_company_jobs(
         skipped_count = 0
 
         # ---------------------------------------------------------
+        # Preload all existing jobs for this company ONCE.
+        #
+        # The old implementation queried the database separately
+        # for every discovered job. That becomes extremely slow
+        # for companies such as Microsoft with 2000+ jobs.
+        # ---------------------------------------------------------
+
+        existing_jobs = db.scalars(
+            select(Job).where(
+                Job.company_id == company.id
+            )
+        ).all()
+
+        existing_by_url: dict[str, Job] = {
+            str(job.url): job
+            for job in existing_jobs
+            if job.url
+        }
+
+        # ---------------------------------------------------------
         # Persist discovered jobs
         # ---------------------------------------------------------
 
@@ -86,11 +111,8 @@ def sync_company_jobs(
 
             job_url = str(discovered.job_url)
 
-            existing_job = db.scalar(
-                select(Job).where(
-                    Job.company_id == company.id,
-                    Job.url == job_url,
-                )
+            existing_job = existing_by_url.get(
+                job_url
             )
 
             if existing_job is None:
@@ -120,6 +142,12 @@ def sync_company_jobs(
                 )
 
                 db.add(job)
+
+                # Add it to the lookup immediately so that
+                # duplicate URLs in the same discovery response
+                # cannot create duplicate Job records.
+                existing_by_url[job_url] = job
+
                 created_jobs.append(job)
                 created_count += 1
 
@@ -130,9 +158,9 @@ def sync_company_jobs(
             #
             # Update fields supplied by the source.
             # Do NOT overwrite existing values with None.
-            # This is important because later detail enrichment
-            # may contain information not present in the listing
-            # response.
+            #
+            # Rich detail fields are preserved if the listing
+            # response does not provide them.
             # -----------------------------------------------------
 
             changed = False
@@ -142,7 +170,9 @@ def sync_company_jobs(
                 and existing_job.source
                 != discovered.source
             ):
-                existing_job.source = discovered.source
+                existing_job.source = (
+                    discovered.source
+                )
                 changed = True
 
             if (
@@ -160,7 +190,9 @@ def sync_company_jobs(
                 and existing_job.title
                 != discovered.title
             ):
-                existing_job.title = discovered.title
+                existing_job.title = (
+                    discovered.title
+                )
                 changed = True
 
             if (
@@ -225,6 +257,10 @@ def sync_company_jobs(
         company.last_scraped_at = datetime.now(
             timezone.utc
         )
+
+        # ---------------------------------------------------------
+        # Single transaction commit
+        # ---------------------------------------------------------
 
         db.commit()
 

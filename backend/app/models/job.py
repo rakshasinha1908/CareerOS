@@ -58,7 +58,7 @@ class Job(Base):
     )
 
     location: Mapped[str | None] = mapped_column(
-        String(300),
+        Text,
         nullable=True,
     )
 

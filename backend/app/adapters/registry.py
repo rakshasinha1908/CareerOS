@@ -7,6 +7,7 @@ from app.adapters.greenhouse import GreenhouseAdapter
 from app.adapters.workday import WorkdayAdapter
 from app.adapters.lever import LeverAdapter
 from app.adapters.google import GoogleAdapter
+from app.adapters.microsoft import MicrosoftAdapter
 
 
 class AdapterRegistry:
@@ -155,5 +156,6 @@ adapter_registry = AdapterRegistry(
         WorkdayAdapter(),
         LeverAdapter(),
         GoogleAdapter(),
+        MicrosoftAdapter(),
     ]
 )
